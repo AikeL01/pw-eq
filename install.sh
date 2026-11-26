@@ -11,12 +11,11 @@ done
 
 mkdir -p "$LIB_DIR" "$BIN_DIR"
 cp "$ROOT_DIR/pw_eq_core.py" "$LIB_DIR/pw_eq_core.py"
-cp "$ROOT_DIR/pw-eq" "$BIN_DIR/pw-eq"
 cp "$ROOT_DIR/pw-eq-gui" "$BIN_DIR/pw-eq-gui"
 cp "$ROOT_DIR/uninstall.sh" "$BIN_DIR/pw-eq-uninstall"
-chmod +x "$BIN_DIR/pw-eq" "$BIN_DIR/pw-eq-gui" "$BIN_DIR/pw-eq-uninstall"
+chmod +x "$BIN_DIR/pw-eq-gui" "$BIN_DIR/pw-eq-uninstall"
 
-echo "Installed pw-eq to $BIN_DIR"
+echo "Installed pw-eq-gui and pw-eq-uninstall to $BIN_DIR"
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
-    echo "Note: Add $BIN_DIR to your PATH to run 'pw-eq' and 'pw-eq-gui' directly."
+    echo "Note: Add $BIN_DIR to your PATH to run 'pw-eq-gui' directly."
 fi
