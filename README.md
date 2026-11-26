@@ -33,7 +33,7 @@ Works on any Wayland or X11 desktop/WM (KDE, GNOME, Hyprland, Sway, XFCE, etc.).
 git clone https://github.com/AikeL01/pw-eq.git
 cd pw-eq
 ./install.sh
-
+```
 ## Uninstall
 
 From anywhere in your terminal:
