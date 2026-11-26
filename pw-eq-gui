@@ -22,97 +22,127 @@ HTML = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PipeWire Parametric EQ</title>
+<title>PW-EQ // param_eq</title>
 <style>
-  :root { --bg:#16181d; --card:#1b1e25; --inset:#121418; --border:#2b2f3a; --text:#e6e9ef; --muted:#9aa3b2; --blue:#2d6cdf; --green:#198754; --cyan:#38bdf8; --amber:#f59e0b; --btn:#252a34; }
+  :root {
+    --bg:#0c0c0e; --panel:#121215; --inset:#09090b; --line:#242429; --line2:#32323a;
+    --text:#e4e4e7; --muted:#787882; --amber:#ff8a1f; --green:#22c55e; --red:#ef4444;
+    --mono:"JetBrains Mono","Fira Code",ui-monospace,monospace;
+    --sans:Inter,system-ui,-apple-system,sans-serif;
+  }
   * { box-sizing:border-box; }
-  body { margin:0; padding:18px; background:var(--bg); color:var(--text); font-family:Inter,system-ui,sans-serif; font-size:14px; }
-  .wrap { max-width:960px; margin:0 auto; display:flex; flex-direction:column; gap:12px; }
-  .card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
-  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-  .row + .row { margin-top:10px; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--text); font-family:var(--sans); font-size:13px; }
+  .rack { max-width:980px; margin:0 auto; display:flex; flex-direction:column; gap:8px; }
+  .unit { background:var(--panel); border:1px solid var(--line); border-radius:3px; padding:10px 12px; }
+  .row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .row + .row { margin-top:8px; padding-top:8px; border-top:1px solid #1b1b20; }
   .grow { flex:1 1 200px; }
-  button, select, input[type="number"], input[type="text"], textarea { background:var(--inset); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:7px 11px; font:inherit; }
-  button { background:var(--btn); cursor:pointer; font-weight:500; }
-  button:hover { background:#2f3643; border-color:#4b5568; }
-  button.primary { background:var(--blue); border-color:#3a7af0; color:#fff; font-weight:600; }
-  button.on { background:var(--green); border-color:#20a567; color:#fff; font-weight:700; }
-  button.off { background:#3a3f4b; border-color:#4f5666; font-weight:700; }
-  button.danger:hover { border-color:#ef4444; color:#fca5a5; }
-  label.chk { display:inline-flex; align-items:center; gap:6px; cursor:pointer; user-select:none; }
-  .muted { color:var(--muted); font-size:12px; }
-  svg { width:100%; height:230px; display:block; background:var(--inset); border-radius:6px; border:1px solid var(--border); }
-  .tabs { display:flex; gap:4px; margin-bottom:-1px; }
-  .tab { padding:8px 16px; border-radius:6px 6px 0 0; background:var(--card); border:1px solid transparent; color:var(--muted); cursor:pointer; }
-  .tab.active { background:#252a34; color:#fff; font-weight:600; border-color:var(--border); border-bottom-color:#252a34; }
+  .lbl { font-family:var(--mono); font-size:11px; letter-spacing:.06em; color:var(--muted); text-transform:uppercase; }
+  .brand { font-family:var(--mono); font-size:11px; letter-spacing:.08em; color:var(--muted); margin-right:6px; }
+  button, select, input[type="number"], input[type="text"], textarea {
+    background:var(--inset); color:var(--text); border:1px solid var(--line);
+    border-radius:2px; padding:5px 10px; font:inherit; outline:none;
+  }
+  select:focus, input:focus, textarea:focus { border-color:var(--amber); }
+  button {
+    background:#19191e; cursor:pointer; font-family:var(--mono); font-size:11px;
+    letter-spacing:.05em; text-transform:uppercase; padding:6px 10px;
+  }
+  button:hover { background:#212128; border-color:var(--line2); }
+  button.primary { border-color:#8a4b12; color:var(--amber); background:#1d150e; font-weight:600; }
+  button.primary:hover { background:#291c11; border-color:var(--amber); }
+  button.danger:hover { border-color:#7f1d1d; color:#fca5a5; }
+  .led-btn { display:inline-flex; align-items:center; gap:7px; font-weight:600; min-width:110px; }
+  .led { width:7px; height:7px; border-radius:50%; background:#4b4b55; display:inline-block; }
+  .led-btn.on { border-color:#1c4d2e; color:#d1fae5; background:#0e1c14; }
+  .led-btn.on .led { background:var(--green); box-shadow:0 0 8px var(--green); }
+  .led-btn.off { color:var(--muted); }
+  label.chk { display:inline-flex; align-items:center; gap:6px; cursor:pointer; user-select:none; font-family:var(--mono); font-size:11px; color:var(--muted); }
+  input[type="checkbox"] { accent-color:var(--amber); cursor:pointer; }
+  svg { width:100%; height:245px; display:block; background:var(--inset); border:1px solid var(--line); border-radius:2px; }
+  .tabs { display:flex; gap:2px; margin-bottom:-1px; }
+  .tab {
+    padding:6px 14px; background:var(--bg); border:1px solid var(--line); border-bottom:1px solid var(--line);
+    color:var(--muted); cursor:pointer; font-family:var(--mono); font-size:11px; letter-spacing:.05em; text-transform:uppercase;
+  }
+  .tab.active { background:var(--panel); color:var(--amber); border-bottom-color:var(--panel); font-weight:600; }
   .pane { display:none; }
   .pane.active { display:block; }
-  table { width:100%; border-collapse:collapse; margin-top:10px; }
-  th, td { padding:7px 10px; border-bottom:1px solid var(--border); text-align:left; }
-  th { color:var(--muted); font-size:12px; background:#1f232b; }
-  textarea { width:100%; min-height:240px; font-family:"JetBrains Mono",monospace; font-size:12.5px; resize:vertical; }
-  .status { font-size:12px; color:var(--muted); display:flex; justify-content:space-between; align-items:center; }
-  body.drag { outline:3px dashed var(--cyan); outline-offset:-8px; }
-  dialog { background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:10px; padding:16px; width:min(540px,92vw); }
-  dialog::backdrop { background:rgba(0,0,0,0.6); }
+  table { width:100%; border-collapse:collapse; margin-top:10px; font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:12px; }
+  th, td { padding:6px 10px; border-bottom:1px solid #1b1b20; text-align:left; }
+  th { color:var(--muted); font-size:10px; letter-spacing:.06em; text-transform:uppercase; background:var(--inset); border-top:1px solid var(--line); }
+  tr:hover td { background:#15151a; }
+  td.idx { color:var(--muted); width:40px; }
+  textarea { width:100%; min-height:230px; font-family:var(--mono); font-size:12px; line-height:1.5; resize:vertical; }
+  .foot { display:flex; justify-content:space-between; font-family:var(--mono); font-size:11px; color:var(--muted); padding:2px 2px; }
+  body.drag { outline:2px dashed var(--amber); outline-offset:-6px; }
+  dialog { background:var(--panel); color:var(--text); border:1px solid var(--line2); border-radius:3px; padding:14px; width:min(540px,92vw); }
+  dialog::backdrop { background:rgba(0,0,0,0.72); }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="card">
+<div class="rack">
+  <div class="unit">
     <div class="row">
-      <button id="toggleBtn" class="off" onclick="toggleEQ()">EQ: OFF</button>
-      <span class="muted">Profile:</span>
+      <span class="brand">PW-EQ</span>
+      <button id="toggleBtn" class="led-btn off" onclick="toggleEQ()"><span class="led"></span><span id="toggleTxt">BYPASS</span></button>
       <select id="profileSel" class="grow" onchange="loadProfile(this.value)"></select>
       <input type="file" id="fileInput" accept=".txt,.apo" hidden onchange="importFileObj(this.files[0]); this.value='';">
-      <button onclick="document.getElementById('fileInput').click()">Import Preset</button>
-      <button onclick="pastePreset()">Paste Preset</button>
-      <button class="danger" onclick="deleteProfile()">Delete</button>
+      <button onclick="document.getElementById('fileInput').click()">Import</button>
+      <button onclick="pastePreset()">Paste</button>
+      <button class="danger" onclick="deleteProfile()">Del</button>
       <button class="primary" onclick="applySelected()">Apply</button>
       <button onclick="quitApp()">Quit</button>
     </div>
     <div class="row">
-      <span class="muted">Output Target:</span>
+      <span class="lbl">Output</span>
       <select id="sinkSel" class="grow" onchange="saveSettings()"></select>
-      <button onclick="refreshState()" title="Refresh devices">↻</button>
-      <label class="chk"><input type="checkbox" id="smartCb" onchange="saveSettings()"> Smart Filter mode (single hardware volume slider)</label>
+      <button onclick="refreshState()" title="Refresh PipeWire sinks">↻</button>
+      <label class="chk" title="Keep hardware device as default sink with one volume slider"><input type="checkbox" id="smartCb" onchange="saveSettings()"> SMART FILTER</label>
     </div>
   </div>
-  <div class="card"><svg id="plot" viewBox="0 0 840 230" onmousemove="onPlotHover(event)" onmouseleave="hoverText.textContent=''"></svg></div>
+
+  <div class="unit" style="padding:8px">
+    <svg id="plot" viewBox="0 0 840 245" onmousemove="onPlotHover(event)" onmouseleave="hoverText.textContent=''"></svg>
+  </div>
+
   <div>
     <div class="tabs">
       <div class="tab active" onclick="switchTab(0)">Bands &amp; Preamp</div>
-      <div class="tab" onclick="switchTab(1)">Raw Preset Editor</div>
-      <div class="tab" onclick="switchTab(2)">PipeWire Config</div>
+      <div class="tab" onclick="switchTab(1)">Raw Preset</div>
+      <div class="tab" onclick="switchTab(2)">PipeWire Conf</div>
     </div>
-    <div class="card" style="border-top-left-radius:0">
+    <div class="unit">
       <div class="pane active" id="pane0">
         <div class="row">
-          <span>Preamp Gain (dB):</span>
-          <input type="number" id="preampIn" step="0.1" min="-30" max="20" style="width:95px" onchange="setPreamp(parseFloat(this.value))">
-          <button onclick="autoPreamp()">Auto-Preamp (No Clipping)</button>
-          <span class="muted" style="margin-left:auto">Tip: Drag &amp; drop any AutoEQ / Squiglink / PEQdB .txt file onto this page</span>
+          <span class="lbl">Preamp (dB)</span>
+          <input type="number" id="preampIn" step="0.1" min="-30" max="20" style="width:90px;font-family:var(--mono)" onchange="setPreamp(parseFloat(this.value))">
+          <button onclick="autoPreamp()">Auto 0 dB</button>
+          <span class="lbl" id="bandCount" style="margin-left:auto">0 BANDS</span>
         </div>
-        <table><thead><tr><th>Active</th><th>Type</th><th>Freq (Hz)</th><th>Gain (dB)</th><th>Q</th></tr></thead><tbody id="bandsBody"></tbody></table>
+        <table><thead><tr><th>On</th><th>#</th><th>Filter</th><th>Freq (Hz)</th><th>Gain (dB)</th><th>Q</th></tr></thead><tbody id="bandsBody"></tbody></table>
       </div>
       <div class="pane" id="pane1">
-        <textarea id="rawEdit" placeholder="Paste Equalizer APO / AutoEQ preset lines here..."></textarea>
-        <div class="row" style="justify-content:flex-end;margin-top:8px"><button class="primary" onclick="saveRawAndApply()">Save Text &amp; Apply</button></div>
+        <textarea id="rawEdit" placeholder="Preamp: -6.2 dB&#10;Filter 1: ON PK Fc 105 Hz Gain 2.1 dB Q 0.71"></textarea>
+        <div class="row" style="justify-content:flex-end;margin-top:8px;border:0;padding:0"><button class="primary" onclick="saveRawAndApply()">Save &amp; Apply</button></div>
       </div>
       <div class="pane" id="pane2">
-        <div class="muted" id="infoMeta" style="margin-bottom:8px"></div>
+        <div class="lbl" id="infoMeta" style="margin-bottom:8px"></div>
         <textarea id="confPreview" readonly></textarea>
       </div>
     </div>
   </div>
-  <div class="status"><span id="statusMsg">Ready</span><span id="hoverTxt"></span></div>
+
+  <div class="foot"><span id="statusMsg">READY</span><span id="hoverTxt"></span></div>
 </div>
+
 <dialog id="pasteDlg">
-  <div style="font-weight:600;margin-bottom:8px">Paste Equalizer APO / AutoEQ Preset</div>
-  <input type="text" id="pasteName" placeholder="Profile name (e.g. HD600 Harman)" style="width:100%;margin-bottom:8px">
+  <div class="lbl" style="margin-bottom:8px">Paste Equalizer APO / AutoEQ Preset</div>
+  <input type="text" id="pasteName" placeholder="Profile name" style="width:100%;margin-bottom:8px">
   <textarea id="pasteBody" style="min-height:160px" placeholder="Preamp: -6.2 dB&#10;Filter 1: ON PK Fc 105 Hz Gain 2.1 dB Q 0.71"></textarea>
-  <div class="row" style="justify-content:flex-end;margin-top:10px"><button onclick="pasteDlg.close()">Cancel</button><button class="primary" onclick="submitPasteModal()">Save &amp; Apply</button></div>
+  <div class="row" style="justify-content:flex-end;margin-top:10px;border:0;padding:0"><button onclick="pasteDlg.close()">Cancel</button><button class="primary" onclick="submitPasteModal()">Save &amp; Apply</button></div>
 </dialog>
+
 <script>
 let currentProf = null;
 const hoverText = document.getElementById("hoverTxt"), pasteDlg = document.getElementById("pasteDlg");
@@ -123,42 +153,48 @@ const switchTab = idx => {
   document.querySelectorAll(".pane").forEach((e, i) => e.classList.toggle("active", i === idx));
 };
 async function refreshState(selectName = null) {
-  const s = await api("/api/state"), tbtn = document.getElementById("toggleBtn"), active = s.state.active_profile || "";
-  tbtn.textContent = s.running ? (active ? `EQ: ON (${active})` : "EQ: ON") : "EQ: OFF (Bypassed)";
-  tbtn.className = s.running ? "on" : "off";
+  const s = await api("/api/state"), tbtn = document.getElementById("toggleBtn"), ttxt = document.getElementById("toggleTxt"), active = s.state.active_profile || "";
+  tbtn.className = "led-btn " + (s.running ? "on" : "off");
+  ttxt.textContent = s.running ? "ACTIVE" : "BYPASS";
+  tbtn.title = active ? `Active profile: ${active}` : "";
   const psel = document.getElementById("profileSel"), prev = selectName || psel.value || active;
   psel.innerHTML = "";
   for (const p of s.profiles) { const o = document.createElement("option"); o.value = o.textContent = p; psel.appendChild(o); }
   if (s.profiles.includes(prev)) psel.value = prev;
   const ssel = document.getElementById("sinkSel");
-  ssel.innerHTML = '<option value="">Auto (Follow Default Hardware Output)</option>';
+  ssel.innerHTML = '<option value="">Auto (Default Hardware Sink)</option>';
   for (const k of s.sinks) { const o = document.createElement("option"); o.value = k.name; o.textContent = k.description; ssel.appendChild(o); }
   ssel.value = s.state.target_node || "";
   document.getElementById("smartCb").checked = s.state.smart_filter !== false;
   document.getElementById("confPreview").value = s.active_conf || "(No active.conf generated yet)";
-  document.getElementById("infoMeta").textContent = `Service: ${s.service_name}  |  Profiles: ${s.profiles_dir}`;
+  document.getElementById("infoMeta").textContent = `UNIT: ${s.service_name}  //  DIR: ${s.profiles_dir}`;
   if (psel.value) await loadProfile(psel.value); else { currentProf = null; renderProfile(null); }
 }
 async function loadProfile(name) {
   if (!name) return;
   currentProf = await api(`/api/profile?name=${encodeURIComponent(name)}`);
   renderProfile(currentProf);
-  setStatus(currentProf.warnings?.length ? currentProf.warnings[0] : `Loaded '${name}' (${currentProf.bands.length} bands)`);
+  setStatus(currentProf.warnings?.length ? currentProf.warnings[0] : `LOADED // ${name}`);
 }
 function renderProfile(prof) {
   const tbody = document.getElementById("bandsBody"); tbody.innerHTML = "";
-  if (!prof) { document.getElementById("rawEdit").value = ""; drawPlot(null); return; }
+  if (!prof) { document.getElementById("rawEdit").value = ""; document.getElementById("bandCount").textContent = "0 BANDS"; drawPlot(null); return; }
   document.getElementById("preampIn").value = prof.preamp.toFixed(2);
   document.getElementById("rawEdit").value = prof.raw_text;
+  const activeCount = prof.bands.filter(b => b.enabled).length;
+  document.getElementById("bandCount").textContent = `${activeCount}/${prof.bands.length} BANDS ACTIVE`;
   prof.bands.forEach((b, i) => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td><input type="checkbox" ${b.enabled ? "checked" : ""} onchange="toggleBand(${i},this.checked)"></td><td>${b.raw_type}</td><td>${b.freq.toFixed(1)}</td><td>${b.has_gain ? (b.gain >= 0 ? "+" : "") + b.gain.toFixed(2) : "—"}</td><td>${b.q.toFixed(3)}</td>`;
+    tr.innerHTML = `<td><input type="checkbox" ${b.enabled ? "checked" : ""} onchange="toggleBand(${i},this.checked)"></td>
+      <td class="idx">${String(i + 1).padStart(2, "0")}</td><td>${b.raw_type}</td><td>${b.freq.toFixed(1)}</td>
+      <td style="color:${b.has_gain ? (b.gain > 0 ? "#ff8a1f" : "#a1a1aa") : "#787882"}">${b.has_gain ? (b.gain >= 0 ? "+" : "") + b.gain.toFixed(2) : "—"}</td>
+      <td>${b.q.toFixed(3)}</td>`;
     tbody.appendChild(tr);
   });
   drawPlot(prof);
 }
 function drawPlot(prof) {
-  const svg = document.getElementById("plot"), W = 840, H = 230, pL = 44, pR = 16, pT = 20, pB = 26, pw = W - pL - pR, ph = H - pT - pB;
+  const svg = document.getElementById("plot"), W = 840, H = 245, pL = 44, pR = 16, pT = 24, pB = 26, pw = W - pL - pR, ph = H - pT - pB;
   let minDb = -15, maxDb = 15;
   if (prof?.curve.freqs.length) {
     const all = prof.curve.total_db.concat(prof.curve.raw_db);
@@ -169,45 +205,54 @@ function drawPlot(prof) {
   const xF = f => pL + pw * (Math.log10(Math.max(20, Math.min(20000, f)) / 20) / Math.log10(1000));
   const yD = d => pT + ph * (1 - (Math.max(minDb, Math.min(maxDb, d)) - minDb) / (maxDb - minDb));
   let out = "";
+  for (const mf of [30, 40, 60, 70, 80, 90, 300, 400, 600, 700, 800, 900, 3000, 4000, 6000, 7000, 8000, 9000]) {
+    const x = xF(mf).toFixed(1);
+    out += `<line x1="${x}" y1="${pT}" x2="${x}" y2="${pT+ph}" stroke="#121216"/>`;
+  }
   for (const gf of [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]) {
     const x = xF(gf).toFixed(1);
-    out += `<line x1="${x}" y1="${pT}" x2="${x}" y2="${pT+ph}" stroke="#222630"/><text x="${x}" y="${H-7}" fill="#7d8699" font-size="11" text-anchor="middle">${gf >= 1000 ? (gf/1000)+"k" : gf}</text>`;
+    out += `<line x1="${x}" y1="${pT}" x2="${x}" y2="${pT+ph}" stroke="#1d1d23"/>`;
+    out += `<text x="${x}" y="${H-8}" fill="#6e6e78" font-family="monospace" font-size="10.5" text-anchor="middle">${gf >= 1000 ? (gf/1000)+"k" : gf}</text>`;
   }
   const step = (maxDb - minDb) <= 30 ? 5 : 10;
   for (let d = minDb; d <= maxDb + 0.01; d += step) {
     const y = yD(d).toFixed(1), z = Math.abs(d) < 0.01;
-    out += `<line x1="${pL}" y1="${y}" x2="${pL+pw}" y2="${y}" stroke="${z ? "#434b5c" : "#222630"}" ${z ? 'stroke-dasharray="5,4"' : ""}/><text x="${pL-6}" y="${+y+4}" fill="#7d8699" font-size="11" text-anchor="end">${d > 0 ? "+"+d : d}</text>`;
+    out += `<line x1="${pL}" y1="${y}" x2="${pL+pw}" y2="${y}" stroke="${z ? "#3a3a44" : "#1b1b21"}" ${z ? 'stroke-dasharray="4,3"' : ""}/>`;
+    out += `<text x="${pL-7}" y="${+y+3.5}" fill="${z ? "#a1a1aa" : "#6e6e78"}" font-family="monospace" font-size="10.5" text-anchor="end">${d > 0 ? "+"+d : d}</text>`;
   }
   if (prof?.curve.freqs.length) {
     const rawPts = prof.curve.freqs.map((f, i) => `${xF(f).toFixed(1)},${yD(prof.curve.raw_db[i]).toFixed(1)}`).join(" ");
     const totPts = prof.curve.freqs.map((f, i) => `${xF(f).toFixed(1)},${yD(prof.curve.total_db[i]).toFixed(1)}`).join(" ");
-    const peak = Math.max(...prof.curve.total_db), col = peak > 0.1 ? "#f59e0b" : "#38bdf8";
-    out += `<polyline fill="none" stroke="#6a7387" stroke-width="1.5" stroke-dasharray="2,4" points="${rawPts}"/><polyline fill="none" stroke="${col}" stroke-width="2.4" points="${totPts}"/>`;
-    for (const b of prof.bands) if (b.enabled) out += `<circle cx="${xF(b.freq).toFixed(1)}" cy="${yD(b.gain).toFixed(1)}" r="4" fill="#38bdf8" stroke="#121418" stroke-width="1.5"/>`;
-    out += `<text x="${pL+pw-4}" y="${pT-5}" fill="${col}" font-size="12" font-weight="600" text-anchor="end">Peak (with preamp): ${peak >= 0 ? "+" : ""}${peak.toFixed(2)} dB${peak > 0.1 ? "  [Clipping Risk — Click Auto-Preamp]" : ""}</text>`;
+    const y0 = yD(0).toFixed(1), x0 = xF(prof.curve.freqs[0]).toFixed(1), x1 = xF(prof.curve.freqs[prof.curve.freqs.length - 1]).toFixed(1);
+    const peak = Math.max(...prof.curve.total_db), clip = peak > 0.1, col = clip ? "#ef4444" : "#ff8a1f";
+    out += `<polygon fill="${clip ? "rgba(239,68,68,0.12)" : "rgba(255,138,31,0.11)"}" points="${x0},${y0} ${totPts} ${x1},${y0}"/>`;
+    out += `<polyline fill="none" stroke="#52525b" stroke-width="1.2" stroke-dasharray="2,3" points="${rawPts}"/>`;
+    out += `<polyline fill="none" stroke="${col}" stroke-width="2" points="${totPts}"/>`;
+    for (const b of prof.bands) if (b.enabled) out += `<circle cx="${xF(b.freq).toFixed(1)}" cy="${yD(b.gain).toFixed(1)}" r="3.2" fill="#09090b" stroke="${col}" stroke-width="1.6"/>`;
+    out += `<text x="${pL+pw-2}" y="15" fill="${col}" font-family="monospace" font-size="11" font-weight="600" text-anchor="end">PEAK ${peak >= 0 ? "+" : ""}${peak.toFixed(2)} dB${clip ? " [CLIP]" : ""}</text>`;
   }
   svg.innerHTML = out;
 }
 function onPlotHover(e) {
   const svg = document.getElementById("plot"); if (!svg._bounds) return;
   const r = svg.getBoundingClientRect(), b = svg._bounds;
-  const x = (e.clientX - r.left) * (840 / r.width), y = (e.clientY - r.top) * (230 / r.height);
+  const x = (e.clientX - r.left) * (840 / r.width), y = (e.clientY - r.top) * (245 / r.height);
   if (x < b.pL || x > b.pL + b.pw || y < b.pT || y > b.pT + b.ph) { hoverText.textContent = ""; return; }
   const db = b.maxDb - ((y - b.pT) / b.ph) * (b.maxDb - b.minDb);
-  hoverText.textContent = `${Math.round(20 * Math.pow(1000, (x - b.pL) / b.pw))} Hz  |  ${db >= 0 ? "+" : ""}${db.toFixed(1)} dB`;
+  hoverText.textContent = `${Math.round(20 * Math.pow(1000, (x - b.pL) / b.pw))} Hz  //  ${db >= 0 ? "+" : ""}${db.toFixed(1)} dB`;
 }
 async function applySelected() {
   const name = document.getElementById("profileSel").value;
   if (!name) return alert("Import or paste a preset first.");
-  setStatus("Applying PipeWire filter-chain...");
-  setStatus((await api("/api/apply", { name })).message); await refreshState(name);
+  setStatus("APPLYING...");
+  setStatus((await api("/api/apply", { name })).message.toUpperCase()); await refreshState(name);
 }
 async function toggleEQ() {
-  setStatus("Updating PipeWire filter-chain...");
-  setStatus((await api("/api/toggle_eq", { name: document.getElementById("profileSel").value })).message); await refreshState();
+  setStatus("SWITCHING...");
+  setStatus((await api("/api/toggle_eq", { name: document.getElementById("profileSel").value })).message.toUpperCase()); await refreshState();
 }
 async function saveSettings() {
-  setStatus((await api("/api/settings", { target_node: document.getElementById("sinkSel").value, smart_filter: document.getElementById("smartCb").checked })).message);
+  setStatus((await api("/api/settings", { target_node: document.getElementById("sinkSel").value, smart_filter: document.getElementById("smartCb").checked })).message.toUpperCase());
 }
 async function setPreamp(val) {
   if (!currentProf || isNaN(val)) return;
@@ -221,22 +266,22 @@ async function toggleBand(index, enabled) {
 async function saveRawAndApply() {
   let name = document.getElementById("profileSel").value || prompt("Profile name:");
   if (!name || !name.trim()) return;
-  setStatus((await api("/api/profile/save", { name: name.trim(), text: document.getElementById("rawEdit").value, apply: true })).message);
+  setStatus((await api("/api/profile/save", { name: name.trim(), text: document.getElementById("rawEdit").value, apply: true })).message.toUpperCase());
   await refreshState(name.trim());
 }
 async function importFileObj(file) {
   if (!file) return;
   const text = await file.text(), name = prompt("Profile name:", file.name.replace(/\.[^.]+$/, ""));
   if (!name || !name.trim()) return;
-  setStatus((await api("/api/profile/save", { name: name.trim(), text, apply: true })).message); await refreshState(name.trim());
+  setStatus((await api("/api/profile/save", { name: name.trim(), text, apply: true })).message.toUpperCase()); await refreshState(name.trim());
 }
 async function pastePreset() {
   try {
     const text = await navigator.clipboard.readText();
     if (text?.trim()) {
-      const name = prompt("Profile name for pasted preset:");
+      const name = prompt("Profile name:");
       if (!name || !name.trim()) return;
-      setStatus((await api("/api/profile/save", { name: name.trim(), text, apply: true })).message);
+      setStatus((await api("/api/profile/save", { name: name.trim(), text, apply: true })).message.toUpperCase());
       await refreshState(name.trim()); return;
     }
   } catch {}
@@ -246,16 +291,16 @@ async function submitPasteModal() {
   const name = document.getElementById("pasteName").value.trim(), text = document.getElementById("pasteBody").value;
   if (!name || !text.trim()) return;
   pasteDlg.close();
-  setStatus((await api("/api/profile/save", { name, text, apply: true })).message); await refreshState(name);
+  setStatus((await api("/api/profile/save", { name, text, apply: true })).message.toUpperCase()); await refreshState(name);
 }
 async function deleteProfile() {
   const name = document.getElementById("profileSel").value;
   if (!name || !confirm(`Delete '${name}'?`)) return;
-  setStatus((await api("/api/profile/delete", { name })).message); await refreshState();
+  setStatus((await api("/api/profile/delete", { name })).message.toUpperCase()); await refreshState();
 }
 async function quitApp() {
   await api("/api/quit", {});
-  document.body.innerHTML = '<div style="padding:40px;text-align:center;color:#9aa3b2">pw-eq-gui stopped. You can close this tab.</div>';
+  document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:monospace;color:#787882">PW-EQ // SERVER STOPPED</div>';
 }
 document.addEventListener("dragover", e => { e.preventDefault(); document.body.classList.add("drag"); });
 document.addEventListener("dragleave", () => document.body.classList.remove("drag"));
