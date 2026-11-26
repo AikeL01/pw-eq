@@ -226,9 +226,9 @@ class MainWindow(QMainWindow):
         self.profile_combo.setMinimumWidth(220)
         self.profile_combo.currentTextChanged.connect(self.on_profile_selected)
 
-        btn_import = QPushButton("Import EQ.txt")
+        btn_import = QPushButton("Import Preset")
         btn_import.clicked.connect(self.on_import_file)
-        btn_paste = QPushButton("Paste EQ.txt")
+        btn_paste = QPushButton("Paste Preset")
         btn_paste.clicked.connect(self.on_paste_clipboard)
         btn_del = QPushButton("Delete")
         btn_del.clicked.connect(self.on_delete_profile)
@@ -317,7 +317,7 @@ class MainWindow(QMainWindow):
         raw_btn_row.addWidget(btn_save_raw)
         tr_lay.addWidget(self.raw_edit)
         tr_lay.addLayout(raw_btn_row)
-        self.tabs.addTab(tab_raw, "Raw EQ.txt Editor")
+        self.tabs.addTab(tab_raw, "Raw Preset Editor")
 
         tab_info = QWidget()
         ti_lay = QVBoxLayout(tab_info)
@@ -568,7 +568,7 @@ class MainWindow(QMainWindow):
     def on_apply_clicked(self) -> None:
         name = self.profile_combo.currentText()
         if not name:
-            QMessageBox.information(self, "No Profile", "Import or paste an EQ.txt first.")
+            QMessageBox.information(self, "No Profile", "Import or paste a preset first.")
             return
         self._run_bg(core.apply_profile, name)
 
@@ -578,13 +578,13 @@ class MainWindow(QMainWindow):
         else:
             name = self.profile_combo.currentText() or core.load_state().get("active_profile", "")
             if not name:
-                QMessageBox.information(self, "No Profile", "Import an EQ.txt profile first.")
+                QMessageBox.information(self, "No Profile", "Import a preset first.")
                 return
             self._run_bg(core.apply_profile, name)
 
     def _import_path(self, path: Path) -> None:
         text = path.read_text(encoding="utf-8", errors="replace")
-        name, ok = QInputDialog.getText(self, "Import EQ.txt", "Profile name:", text=path.stem)
+        name, ok = QInputDialog.getText(self, "Import Preset", "Profile name:", text=path.stem)
         if not ok or not name.strip():
             return
         name = name.strip()
@@ -594,7 +594,7 @@ class MainWindow(QMainWindow):
 
     def on_import_file(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Import Parametric EQ.txt", str(Path.home()), "EQ Files (*.txt *.apo);;All Files (*)"
+            self, "Import Parametric EQ Preset", str(Path.home()), "EQ Files (*.txt *.apo);;All Files (*)"
         )
         if file_path:
             self._import_path(Path(file_path))
@@ -602,7 +602,7 @@ class MainWindow(QMainWindow):
     def on_paste_clipboard(self) -> None:
         text = QApplication.clipboard().text()
         if not text.strip():
-            QMessageBox.information(self, "Empty Clipboard", "Copy your EQ.txt text first.")
+            QMessageBox.information(self, "Empty Clipboard", "Copy your Equalizer APO / AutoEQ preset text first.")
             return
         if not core.parse_eq_text(text).bands:
             QMessageBox.warning(self, "No Filters Found", "Clipboard text did not contain valid Equalizer APO Filter lines.")

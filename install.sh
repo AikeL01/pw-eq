@@ -30,7 +30,7 @@ cat <<EOF > "$APP_DIR/pw-eq.desktop"
 [Desktop Entry]
 Type=Application
 Name=PipeWire Parametric EQ
-Comment=Native PipeWire EQ.txt loader and profile switcher
+Comment=Native PipeWire Parametric EQ preset loader and profile switcher
 Exec=$BIN_DIR/pw-eq-gui
 Icon=audio-card
 Terminal=false

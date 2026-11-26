@@ -16,8 +16,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(prog="pw-eq", description="PipeWire Native Parametric EQ manager")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    p_imp = sub.add_parser("import", help="Import an EQ.txt file")
-    p_imp.add_argument("file", help="Path to EQ.txt")
+    p_imp = sub.add_parser("import", help="Import an Equalizer APO / AutoEQ preset (.txt)")
+    p_imp.add_argument("file", help="Path to preset .txt file")
     p_imp.add_argument("--name", help="Profile name (defaults to filename)")
     p_imp.add_argument("--apply", action="store_true", help="Immediately apply after importing")
 
@@ -59,7 +59,7 @@ def main() -> int:
         active, running = state.get("active_profile", ""), core.is_eq_running()
         profiles = core.list_profiles()
         if not profiles:
-            print("No profiles saved yet. Run: pw-eq import <EQ.txt> --apply")
+            print("No profiles saved yet. Run: pw-eq import <preset.txt> --apply")
             return 0
         for p in profiles:
             mark = "*" if (running and p == active) else ("-" if p == active else " ")
