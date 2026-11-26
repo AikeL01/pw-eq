@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+for _p in (Path(__file__).resolve().parent, Path.home() / ".local" / "lib" / "pw-eq"):
+    if (_p / "pw_eq_core.py").exists():
+        sys.path.insert(0, str(_p))
+        break
+import pw_eq_core as core
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog="pw-eq", description="PipeWire Native Parametric EQ manager")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    p_imp = sub.add_parser("import", help="Import an EQ.txt file")
+    p_imp.add_argument("file", help="Path to EQ.txt")
+    p_imp.add_argument("--name", help="Profile name (defaults to filename)")
+    p_imp.add_argument("--apply", action="store_true", help="Immediately apply after importing")
+
+    sub.add_parser("list", help="List saved EQ profiles")
+
+    p_use = sub.add_parser("use", help="Apply a saved EQ profile")
+    p_use.add_argument("name", help="Profile name")
+    p_use.add_argument("--target", help="Optional PipeWire target node.name", default=None)
+
+    sub.add_parser("on", help="Enable the last active EQ profile")
+    sub.add_parser("off", help="Disable EQ and restore hardware output")
+    sub.add_parser("toggle", help="Toggle EQ ON/OFF")
+    sub.add_parser("status", help="Show current EQ status")
+    sub.add_parser("sinks", help="List available PipeWire output sinks")
+
+    args = parser.parse_args()
+    core.ensure_dirs()
+
+    if args.cmd == "import":
+        src = Path(args.file).expanduser()
+        if not src.exists():
+            print(f"Error: File not found: {src}", file=sys.stderr)
+            return 1
+        text = src.read_text(encoding="utf-8", errors="replace")
+        name = args.name or src.stem
+        parsed = core.parse_eq_text(text, name=name)
+        core.save_profile_text(name, text)
+        print(f"Imported '{name}' ({len(parsed.bands)} bands, preamp {parsed.preamp:+.2f} dB)")
+        for w in parsed.warnings:
+            print("  Warning:", w)
+        if args.apply:
+            ok, msg = core.apply_profile(name)
+            print(msg)
+            return 0 if ok else 1
+        return 0
+
+    if args.cmd == "list":
+        state = core.load_state()
+        active, running = state.get("active_profile", ""), core.is_eq_running()
+        profiles = core.list_profiles()
+        if not profiles:
+            print("No profiles saved yet. Run: pw-eq import <EQ.txt> --apply")
+            return 0
+        for p in profiles:
+            mark = "*" if (running and p == active) else ("-" if p == active else " ")
+            print(f" {mark} {p}")
+        return 0
+
+    if args.cmd == "use":
+        if args.name not in core.list_profiles():
+            print(f"Error: Profile '{args.name}' not found.", file=sys.stderr)
+            return 1
+        ok, msg = core.apply_profile(args.name, target_node=args.target)
+        print(msg)
+        return 0 if ok else 1
+
+    if args.cmd == "on":
+        name = core.load_state().get("active_profile", "")
+        if not name or name not in core.list_profiles():
+            profiles = core.list_profiles()
+            if not profiles:
+                print("Error: No saved profiles.", file=sys.stderr)
+                return 1
+            name = profiles[0]
+        ok, msg = core.apply_profile(name)
+        print(msg)
+        return 0 if ok else 1
+
+    if args.cmd == "off":
+        ok, msg = core.stop_eq()
+        print(msg)
+        return 0 if ok else 1
+
+    if args.cmd == "toggle":
+        if core.is_eq_running():
+            ok, msg = core.stop_eq()
+        else:
+            name = core.load_state().get("active_profile", "")
+            if not name or name not in core.list_profiles():
+                profiles = core.list_profiles()
+                if not profiles:
+                    print("Error: No saved profiles.", file=sys.stderr)
+                    return 1
+                name = profiles[0]
+            ok, msg = core.apply_profile(name)
+        print(msg)
+        return 0 if ok else 1
+
+    if args.cmd == "status":
+        state = core.load_state()
+        _, default_sink, _ = core.get_pw_sinks_and_defaults()
+        print(f"State          : {'ACTIVE (ON)' if core.is_eq_running() else 'BYPASSED (OFF)'}")
+        print(f"Active Profile : {state.get('active_profile') or '(none)'}")
+        print(f"Smart Filter   : {state.get('smart_filter', True)}")
+        print(f"Target Output  : {state.get('target_node') or 'Auto (Follow Default)'}")
+        print(f"Default Sink   : {default_sink or '(unknown)'}")
+        return 0
+
+    if args.cmd == "sinks":
+        sinks, default_sink, _ = core.get_pw_sinks_and_defaults()
+        for s in sinks:
+            if not core.is_eq_node(s["name"]):
+                mark = "*" if s["name"] == default_sink else " "
+                print(f" {mark} [{s['id']}] {s['description']} ({s['name']})")
+        return 0
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
