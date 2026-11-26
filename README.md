@@ -39,3 +39,9 @@ cd pw-eq
 From anywhere in your terminal:
 ```bash
 pw-eq-uninstall
+```
+Or from the cloned repository:
+```bash
+./uninstall.sh          # asks whether to keep saved profiles
+./uninstall.sh --purge  # removes everything including saved profiles
+```
