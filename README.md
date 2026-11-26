@@ -1,8 +1,8 @@
 # pw-eq
 
-PipeWire-native Parametric EQ manager for Linux (CachyOS / Arch / Wayland).
+A lightweight, PipeWire-native Parametric EQ manager for Linux.
 
-Loads Equalizer APO / AutoEQ / Squiglink / PEQdB `EQ.txt` presets directly into PipeWire's built-in `param_eq` filter-chain using WirePlumber Smart Filters (`filter.smart = true`), so your hardware output stays the single volume slider.
+Loads Equalizer APO / AutoEQ / Squiglink / PEQdB `EQ.txt` presets directly into PipeWire's built-in `param_eq` filter-chain using WirePlumber Smart Filters (`filter.smart = true`), keeping your hardware output as the single volume slider.
 
 ## Features
 
@@ -13,14 +13,19 @@ Loads Equalizer APO / AutoEQ / Squiglink / PEQdB `EQ.txt` presets directly into 
   - Live 20 Hz – 20 kHz frequency response curve with clipping warning & 1-click **Auto-Preamp**.
   - Per-band toggle table + raw `EQ.txt` editor.
   - System tray icon for quick bypass and profile switching.
-- **CLI & Hotkey Friendly (`pw-eq`)**: Bind `pw-eq toggle` to a KDE or Hyprland shortcut.
+- **CLI & Hotkey Friendly (`pw-eq`)**: Bind `pw-eq toggle` to a desktop/WM shortcut.
 
 ## Requirements
 
-- `pipewire`
-- `wireplumber` (0.5+ for Smart Filter mode)
-- `python`
-- `python-pyqt6`
+- **Linux with `systemd`** (uses `systemctl --user`)
+- **`pipewire`**
+- **`wireplumber`** (0.5+ recommended for Smart Filter mode; older 0.4 setups can uncheck Smart Filter mode in the GUI)
+- **Python 3.10+**
+- **PyQt6** (for GUI & tray):
+  - Arch / CachyOS / EndeavourOS: `python-pyqt6` *(auto-installed by `install.sh`)*
+  - Fedora / Debian / Ubuntu: `python3-pyqt6` *(install before running `install.sh`)*
+
+Works on any Wayland or X11 desktop/WM (KDE, GNOME, Hyprland, Sway, XFCE, etc.). System tray features require a desktop/panel with tray support.
 
 ## Installation
 
