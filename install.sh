@@ -23,7 +23,8 @@ mkdir -p "$LIB_DIR" "$BIN_DIR" "$APP_DIR"
 cp "$ROOT_DIR/pw_eq_core.py" "$LIB_DIR/pw_eq_core.py"
 cp "$ROOT_DIR/pw-eq" "$BIN_DIR/pw-eq"
 cp "$ROOT_DIR/pw-eq-gui" "$BIN_DIR/pw-eq-gui"
-chmod +x "$BIN_DIR/pw-eq" "$BIN_DIR/pw-eq-gui"
+cp "$ROOT_DIR/uninstall.sh" "$BIN_DIR/pw-eq-uninstall"
+chmod +x "$BIN_DIR/pw-eq" "$BIN_DIR/pw-eq-gui" "$BIN_DIR/pw-eq-uninstall"
 
 cat <<EOF > "$APP_DIR/pw-eq.desktop"
 [Desktop Entry]
