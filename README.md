@@ -34,6 +34,20 @@ git clone https://github.com/AikeL01/pw-eq.git
 cd pw-eq
 ./install.sh
 ```
+## Usage
+
+- **GUI + System Tray:**
+  ```bash
+  pw-eq-gui
+  ```
+- **CLI:**
+  ```bash
+  pw-eq import ~/Downloads/your_eq.txt --apply
+  pw-eq list
+  pw-eq use "your_eq"
+  pw-eq toggle   # bind to a keyboard shortcut
+  pw-eq status
+  ```
 ## Uninstall
 
 From anywhere in your terminal:
