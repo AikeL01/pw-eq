@@ -26,6 +26,6 @@ Load any Equalizer APO / AutoEQ / Squiglink / PEQdB `EQ.txt` preset directly int
 
 ### Option 1: User-local install (any distro)
 ```bash
-git clone https://github.com/<your-username>/pw-eq.git
+git clone https://github.com/AikeL01/pw-eq.git
 cd pw-eq
 ./install.sh
