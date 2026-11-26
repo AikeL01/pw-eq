@@ -1,48 +1,15 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import math
+import argparse
+import json
 import sys
+import threading
+import urllib.parse
+import webbrowser
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import List
-
-from PyQt6.QtCore import QPointF, Qt, QThread, pyqtSignal
-from PyQt6.QtGui import (
-    QAction,
-    QColor,
-    QDragEnterEvent,
-    QDropEvent,
-    QFont,
-    QIcon,
-    QPainter,
-    QPainterPath,
-    QPen,
-    QPixmap,
-)
-from PyQt6.QtWidgets import (
-    QAbstractItemView,
-    QApplication,
-    QCheckBox,
-    QComboBox,
-    QDoubleSpinBox,
-    QFileDialog,
-    QFrame,
-    QHBoxLayout,
-    QHeaderView,
-    QInputDialog,
-    QLabel,
-    QMainWindow,
-    QMenu,
-    QMessageBox,
-    QPlainTextEdit,
-    QPushButton,
-    QSystemTrayIcon,
-    QTableWidget,
-    QTableWidgetItem,
-    QTabWidget,
-    QVBoxLayout,
-    QWidget,
-)
 
 for _p in (Path(__file__).resolve().parent, Path.home() / ".local" / "lib" / "pw-eq"):
     if (_p / "pw_eq_core.py").exists():
@@ -50,592 +17,376 @@ for _p in (Path(__file__).resolve().parent, Path.home() / ".local" / "lib" / "pw
         break
 import pw_eq_core as core
 
-DARK_QSS = """
-QMainWindow, QWidget { background-color: #16181d; color: #e6e9ef; font-family: "Inter", "Noto Sans", sans-serif; font-size: 13px; }
-QTabWidget::pane { border: 1px solid #2b2f3a; border-radius: 8px; background: #1b1e25; }
-QTabBar::tab { background: #1b1e25; color: #9aa3b2; padding: 8px 16px; border-top-left-radius: 6px; border-top-right-radius: 6px; margin-right: 4px; }
-QTabBar::tab:selected { background: #252a34; color: #ffffff; font-weight: 600; }
-QPushButton { background-color: #252a34; border: 1px solid #343b48; border-radius: 6px; padding: 7px 14px; color: #e6e9ef; }
-QPushButton:hover { background-color: #2f3643; border-color: #4b5568; }
-QPushButton:pressed { background-color: #1e222b; }
-QPushButton#primaryBtn { background-color: #2d6cdf; border-color: #3a7af0; color: #ffffff; font-weight: 600; }
-QPushButton#primaryBtn:hover { background-color: #3b7be8; }
-QPushButton#toggleOn { background-color: #198754; border-color: #20a567; color: #ffffff; font-weight: 700; padding: 8px 18px; }
-QPushButton#toggleOff { background-color: #3a3f4b; border-color: #4f5666; color: #d0d5df; font-weight: 700; padding: 8px 18px; }
-QComboBox, QDoubleSpinBox, QPlainTextEdit, QTableWidget { background-color: #121418; border: 1px solid #2b2f3a; border-radius: 6px; padding: 5px 8px; color: #e6e9ef; selection-background-color: #2d6cdf; }
-QHeaderView::section { background-color: #1f232b; color: #9aa3b2; padding: 6px; border: none; border-bottom: 1px solid #2b2f3a; font-weight: 600; }
-QFrame#card { background-color: #1b1e25; border: 1px solid #2b2f3a; border-radius: 10px; }
-QLabel#muted { color: #9aa3b2; font-size: 12px; }
+HTML = r"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PipeWire Parametric EQ</title>
+<style>
+  :root { --bg:#16181d; --card:#1b1e25; --inset:#121418; --border:#2b2f3a; --text:#e6e9ef; --muted:#9aa3b2; --blue:#2d6cdf; --green:#198754; --cyan:#38bdf8; --amber:#f59e0b; --btn:#252a34; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:18px; background:var(--bg); color:var(--text); font-family:Inter,system-ui,sans-serif; font-size:14px; }
+  .wrap { max-width:960px; margin:0 auto; display:flex; flex-direction:column; gap:12px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .row + .row { margin-top:10px; }
+  .grow { flex:1 1 200px; }
+  button, select, input[type="number"], input[type="text"], textarea { background:var(--inset); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:7px 11px; font:inherit; }
+  button { background:var(--btn); cursor:pointer; font-weight:500; }
+  button:hover { background:#2f3643; border-color:#4b5568; }
+  button.primary { background:var(--blue); border-color:#3a7af0; color:#fff; font-weight:600; }
+  button.on { background:var(--green); border-color:#20a567; color:#fff; font-weight:700; }
+  button.off { background:#3a3f4b; border-color:#4f5666; font-weight:700; }
+  button.danger:hover { border-color:#ef4444; color:#fca5a5; }
+  label.chk { display:inline-flex; align-items:center; gap:6px; cursor:pointer; user-select:none; }
+  .muted { color:var(--muted); font-size:12px; }
+  svg { width:100%; height:230px; display:block; background:var(--inset); border-radius:6px; border:1px solid var(--border); }
+  .tabs { display:flex; gap:4px; margin-bottom:-1px; }
+  .tab { padding:8px 16px; border-radius:6px 6px 0 0; background:var(--card); border:1px solid transparent; color:var(--muted); cursor:pointer; }
+  .tab.active { background:#252a34; color:#fff; font-weight:600; border-color:var(--border); border-bottom-color:#252a34; }
+  .pane { display:none; }
+  .pane.active { display:block; }
+  table { width:100%; border-collapse:collapse; margin-top:10px; }
+  th, td { padding:7px 10px; border-bottom:1px solid var(--border); text-align:left; }
+  th { color:var(--muted); font-size:12px; background:#1f232b; }
+  textarea { width:100%; min-height:240px; font-family:"JetBrains Mono",monospace; font-size:12.5px; resize:vertical; }
+  .status { font-size:12px; color:var(--muted); display:flex; justify-content:space-between; align-items:center; }
+  body.drag { outline:3px dashed var(--cyan); outline-offset:-8px; }
+  dialog { background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:10px; padding:16px; width:min(540px,92vw); }
+  dialog::backdrop { background:rgba(0,0,0,0.6); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="row">
+      <button id="toggleBtn" class="off" onclick="toggleEQ()">EQ: OFF</button>
+      <span class="muted">Profile:</span>
+      <select id="profileSel" class="grow" onchange="loadProfile(this.value)"></select>
+      <input type="file" id="fileInput" accept=".txt,.apo" hidden onchange="importFileObj(this.files[0]); this.value='';">
+      <button onclick="document.getElementById('fileInput').click()">Import Preset</button>
+      <button onclick="pastePreset()">Paste Preset</button>
+      <button class="danger" onclick="deleteProfile()">Delete</button>
+      <button class="primary" onclick="applySelected()">Apply</button>
+      <button onclick="quitApp()">Quit</button>
+    </div>
+    <div class="row">
+      <span class="muted">Output Target:</span>
+      <select id="sinkSel" class="grow" onchange="saveSettings()"></select>
+      <button onclick="refreshState()" title="Refresh devices">↻</button>
+      <label class="chk"><input type="checkbox" id="smartCb" onchange="saveSettings()"> Smart Filter mode (single hardware volume slider)</label>
+    </div>
+  </div>
+  <div class="card"><svg id="plot" viewBox="0 0 840 230" onmousemove="onPlotHover(event)" onmouseleave="hoverText.textContent=''"></svg></div>
+  <div>
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab(0)">Bands &amp; Preamp</div>
+      <div class="tab" onclick="switchTab(1)">Raw Preset Editor</div>
+      <div class="tab" onclick="switchTab(2)">PipeWire Config</div>
+    </div>
+    <div class="card" style="border-top-left-radius:0">
+      <div class="pane active" id="pane0">
+        <div class="row">
+          <span>Preamp Gain (dB):</span>
+          <input type="number" id="preampIn" step="0.1" min="-30" max="20" style="width:95px" onchange="setPreamp(parseFloat(this.value))">
+          <button onclick="autoPreamp()">Auto-Preamp (No Clipping)</button>
+          <span class="muted" style="margin-left:auto">Tip: Drag &amp; drop any AutoEQ / Squiglink / PEQdB .txt file onto this page</span>
+        </div>
+        <table><thead><tr><th>Active</th><th>Type</th><th>Freq (Hz)</th><th>Gain (dB)</th><th>Q</th></tr></thead><tbody id="bandsBody"></tbody></table>
+      </div>
+      <div class="pane" id="pane1">
+        <textarea id="rawEdit" placeholder="Paste Equalizer APO / AutoEQ preset lines here..."></textarea>
+        <div class="row" style="justify-content:flex-end;margin-top:8px"><button class="primary" onclick="saveRawAndApply()">Save Text &amp; Apply</button></div>
+      </div>
+      <div class="pane" id="pane2">
+        <div class="muted" id="infoMeta" style="margin-bottom:8px"></div>
+        <textarea id="confPreview" readonly></textarea>
+      </div>
+    </div>
+  </div>
+  <div class="status"><span id="statusMsg">Ready</span><span id="hoverTxt"></span></div>
+</div>
+<dialog id="pasteDlg">
+  <div style="font-weight:600;margin-bottom:8px">Paste Equalizer APO / AutoEQ Preset</div>
+  <input type="text" id="pasteName" placeholder="Profile name (e.g. HD600 Harman)" style="width:100%;margin-bottom:8px">
+  <textarea id="pasteBody" style="min-height:160px" placeholder="Preamp: -6.2 dB&#10;Filter 1: ON PK Fc 105 Hz Gain 2.1 dB Q 0.71"></textarea>
+  <div class="row" style="justify-content:flex-end;margin-top:10px"><button onclick="pasteDlg.close()">Cancel</button><button class="primary" onclick="submitPasteModal()">Save &amp; Apply</button></div>
+</dialog>
+<script>
+let currentProf = null;
+const hoverText = document.getElementById("hoverTxt"), pasteDlg = document.getElementById("pasteDlg");
+const api = async (u, b = null) => (await fetch(u, b ? { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(b) } : {})).json();
+const setStatus = m => { document.getElementById("statusMsg").textContent = m; };
+const switchTab = idx => {
+  document.querySelectorAll(".tab").forEach((e, i) => e.classList.toggle("active", i === idx));
+  document.querySelectorAll(".pane").forEach((e, i) => e.classList.toggle("active", i === idx));
+};
+async function refreshState(selectName = null) {
+  const s = await api("/api/state"), tbtn = document.getElementById("toggleBtn"), active = s.state.active_profile || "";
+  tbtn.textContent = s.running ? (active ? `EQ: ON (${active})` : "EQ: ON") : "EQ: OFF (Bypassed)";
+  tbtn.className = s.running ? "on" : "off";
+  const psel = document.getElementById("profileSel"), prev = selectName || psel.value || active;
+  psel.innerHTML = "";
+  for (const p of s.profiles) { const o = document.createElement("option"); o.value = o.textContent = p; psel.appendChild(o); }
+  if (s.profiles.includes(prev)) psel.value = prev;
+  const ssel = document.getElementById("sinkSel");
+  ssel.innerHTML = '<option value="">Auto (Follow Default Hardware Output)</option>';
+  for (const k of s.sinks) { const o = document.createElement("option"); o.value = k.name; o.textContent = k.description; ssel.appendChild(o); }
+  ssel.value = s.state.target_node || "";
+  document.getElementById("smartCb").checked = s.state.smart_filter !== false;
+  document.getElementById("confPreview").value = s.active_conf || "(No active.conf generated yet)";
+  document.getElementById("infoMeta").textContent = `Service: ${s.service_name}  |  Profiles: ${s.profiles_dir}`;
+  if (psel.value) await loadProfile(psel.value); else { currentProf = null; renderProfile(null); }
+}
+async function loadProfile(name) {
+  if (!name) return;
+  currentProf = await api(`/api/profile?name=${encodeURIComponent(name)}`);
+  renderProfile(currentProf);
+  setStatus(currentProf.warnings?.length ? currentProf.warnings[0] : `Loaded '${name}' (${currentProf.bands.length} bands)`);
+}
+function renderProfile(prof) {
+  const tbody = document.getElementById("bandsBody"); tbody.innerHTML = "";
+  if (!prof) { document.getElementById("rawEdit").value = ""; drawPlot(null); return; }
+  document.getElementById("preampIn").value = prof.preamp.toFixed(2);
+  document.getElementById("rawEdit").value = prof.raw_text;
+  prof.bands.forEach((b, i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td><input type="checkbox" ${b.enabled ? "checked" : ""} onchange="toggleBand(${i},this.checked)"></td><td>${b.raw_type}</td><td>${b.freq.toFixed(1)}</td><td>${b.has_gain ? (b.gain >= 0 ? "+" : "") + b.gain.toFixed(2) : "—"}</td><td>${b.q.toFixed(3)}</td>`;
+    tbody.appendChild(tr);
+  });
+  drawPlot(prof);
+}
+function drawPlot(prof) {
+  const svg = document.getElementById("plot"), W = 840, H = 230, pL = 44, pR = 16, pT = 20, pB = 26, pw = W - pL - pR, ph = H - pT - pB;
+  let minDb = -15, maxDb = 15;
+  if (prof?.curve.freqs.length) {
+    const all = prof.curve.total_db.concat(prof.curve.raw_db);
+    const span = Math.max(15, Math.ceil(Math.max(Math.abs(Math.max(...all)), Math.abs(Math.min(...all))) / 5) * 5);
+    minDb = -span; maxDb = span;
+  }
+  svg._bounds = { pL, pT, pw, ph, minDb, maxDb };
+  const xF = f => pL + pw * (Math.log10(Math.max(20, Math.min(20000, f)) / 20) / Math.log10(1000));
+  const yD = d => pT + ph * (1 - (Math.max(minDb, Math.min(maxDb, d)) - minDb) / (maxDb - minDb));
+  let out = "";
+  for (const gf of [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]) {
+    const x = xF(gf).toFixed(1);
+    out += `<line x1="${x}" y1="${pT}" x2="${x}" y2="${pT+ph}" stroke="#222630"/><text x="${x}" y="${H-7}" fill="#7d8699" font-size="11" text-anchor="middle">${gf >= 1000 ? (gf/1000)+"k" : gf}</text>`;
+  }
+  const step = (maxDb - minDb) <= 30 ? 5 : 10;
+  for (let d = minDb; d <= maxDb + 0.01; d += step) {
+    const y = yD(d).toFixed(1), z = Math.abs(d) < 0.01;
+    out += `<line x1="${pL}" y1="${y}" x2="${pL+pw}" y2="${y}" stroke="${z ? "#434b5c" : "#222630"}" ${z ? 'stroke-dasharray="5,4"' : ""}/><text x="${pL-6}" y="${+y+4}" fill="#7d8699" font-size="11" text-anchor="end">${d > 0 ? "+"+d : d}</text>`;
+  }
+  if (prof?.curve.freqs.length) {
+    const rawPts = prof.curve.freqs.map((f, i) => `${xF(f).toFixed(1)},${yD(prof.curve.raw_db[i]).toFixed(1)}`).join(" ");
+    const totPts = prof.curve.freqs.map((f, i) => `${xF(f).toFixed(1)},${yD(prof.curve.total_db[i]).toFixed(1)}`).join(" ");
+    const peak = Math.max(...prof.curve.total_db), col = peak > 0.1 ? "#f59e0b" : "#38bdf8";
+    out += `<polyline fill="none" stroke="#6a7387" stroke-width="1.5" stroke-dasharray="2,4" points="${rawPts}"/><polyline fill="none" stroke="${col}" stroke-width="2.4" points="${totPts}"/>`;
+    for (const b of prof.bands) if (b.enabled) out += `<circle cx="${xF(b.freq).toFixed(1)}" cy="${yD(b.gain).toFixed(1)}" r="4" fill="#38bdf8" stroke="#121418" stroke-width="1.5"/>`;
+    out += `<text x="${pL+pw-4}" y="${pT-5}" fill="${col}" font-size="12" font-weight="600" text-anchor="end">Peak (with preamp): ${peak >= 0 ? "+" : ""}${peak.toFixed(2)} dB${peak > 0.1 ? "  [Clipping Risk — Click Auto-Preamp]" : ""}</text>`;
+  }
+  svg.innerHTML = out;
+}
+function onPlotHover(e) {
+  const svg = document.getElementById("plot"); if (!svg._bounds) return;
+  const r = svg.getBoundingClientRect(), b = svg._bounds;
+  const x = (e.clientX - r.left) * (840 / r.width), y = (e.clientY - r.top) * (230 / r.height);
+  if (x < b.pL || x > b.pL + b.pw || y < b.pT || y > b.pT + b.ph) { hoverText.textContent = ""; return; }
+  const db = b.maxDb - ((y - b.pT) / b.ph) * (b.maxDb - b.minDb);
+  hoverText.textContent = `${Math.round(20 * Math.pow(1000, (x - b.pL) / b.pw))} Hz  |  ${db >= 0 ? "+" : ""}${db.toFixed(1)} dB`;
+}
+async function applySelected() {
+  const name = document.getElementById("profileSel").value;
+  if (!name) return alert("Import or paste a preset first.");
+  setStatus("Applying PipeWire filter-chain...");
+  setStatus((await api("/api/apply", { name })).message); await refreshState(name);
+}
+async function toggleEQ() {
+  setStatus("Updating PipeWire filter-chain...");
+  setStatus((await api("/api/toggle_eq", { name: document.getElementById("profileSel").value })).message); await refreshState();
+}
+async function saveSettings() {
+  setStatus((await api("/api/settings", { target_node: document.getElementById("sinkSel").value, smart_filter: document.getElementById("smartCb").checked })).message);
+}
+async function setPreamp(val) {
+  if (!currentProf || isNaN(val)) return;
+  currentProf = await api("/api/profile/preamp", { name: currentProf.name, preamp: val }); renderProfile(currentProf);
+}
+const autoPreamp = () => { if (currentProf) setPreamp(currentProf.curve.recommended_preamp); };
+async function toggleBand(index, enabled) {
+  if (!currentProf) return;
+  currentProf = await api("/api/profile/toggle_band", { name: currentProf.name, index, enabled }); renderProfile(currentProf);
+}
+async function saveRawAndApply() {
+  let name = document.getElementById("profileSel").value || prompt("Profile name:");
+  if (!name || !name.trim()) return;
+  setStatus((await api("/api/profile/save", { name: name.trim(), text: document.getElementById("rawEdit").value, apply: true })).message);
+  await refreshState(name.trim());
+}
+async function importFileObj(file) {
+  if (!file) return;
+  const text = await file.text(), name = prompt("Profile name:", file.name.replace(/\.[^.]+$/, ""));
+  if (!name || !name.trim()) return;
+  setStatus((await api("/api/profile/save", { name: name.trim(), text, apply: true })).message); await refreshState(name.trim());
+}
+async function pastePreset() {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text?.trim()) {
+      const name = prompt("Profile name for pasted preset:");
+      if (!name || !name.trim()) return;
+      setStatus((await api("/api/profile/save", { name: name.trim(), text, apply: true })).message);
+      await refreshState(name.trim()); return;
+    }
+  } catch {}
+  document.getElementById("pasteName").value = ""; document.getElementById("pasteBody").value = ""; pasteDlg.showModal();
+}
+async function submitPasteModal() {
+  const name = document.getElementById("pasteName").value.trim(), text = document.getElementById("pasteBody").value;
+  if (!name || !text.trim()) return;
+  pasteDlg.close();
+  setStatus((await api("/api/profile/save", { name, text, apply: true })).message); await refreshState(name);
+}
+async function deleteProfile() {
+  const name = document.getElementById("profileSel").value;
+  if (!name || !confirm(`Delete '${name}'?`)) return;
+  setStatus((await api("/api/profile/delete", { name })).message); await refreshState();
+}
+async function quitApp() {
+  await api("/api/quit", {});
+  document.body.innerHTML = '<div style="padding:40px;text-align:center;color:#9aa3b2">pw-eq-gui stopped. You can close this tab.</div>';
+}
+document.addEventListener("dragover", e => { e.preventDefault(); document.body.classList.add("drag"); });
+document.addEventListener("dragleave", () => document.body.classList.remove("drag"));
+document.addEventListener("drop", e => { e.preventDefault(); document.body.classList.remove("drag"); if (e.dataTransfer.files.length) importFileObj(e.dataTransfer.files[0]); });
+refreshState();
+</script>
+</body>
+</html>
 """
 
 
-def make_tray_icon(active: bool) -> QIcon:
-    pix = QPixmap(64, 64)
-    pix.fill(Qt.GlobalColor.transparent)
-    p = QPainter(pix)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.setBrush(QColor("#198754") if active else QColor("#49505e"))
-    p.setPen(Qt.PenStyle.NoPen)
-    p.drawRoundedRect(4, 4, 56, 56, 14, 14)
-    p.setPen(QPen(QColor("#ffffff"), 5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-    for x1, y1, x2, y2 in ((18, 44, 18, 24), (32, 44, 32, 16), (46, 44, 46, 28)):
-        p.drawLine(x1, y1, x2, y2)
-    p.end()
-    return QIcon(pix)
+def _serialize_profile(prof: core.EQProfile) -> dict:
+    freqs, raw_db, total_db = core.compute_response_curve(prof)
+    return {
+        "name": prof.name, "preamp": prof.preamp, "raw_text": prof.raw_text, "warnings": prof.warnings,
+        "bands": [{"enabled": b.enabled, "raw_type": b.raw_type, "freq": b.freq, "gain": b.gain, "q": b.q, "has_gain": b.pw_type not in core.NO_GAIN_TYPES} for b in prof.bands],
+        "curve": {"freqs": freqs, "raw_db": raw_db, "total_db": total_db, "recommended_preamp": core.recommended_preamp(prof)},
+    }
 
 
-class ResponsePlot(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setMinimumHeight(210)
-        self.freqs: List[float] = []
-        self.raw_db: List[float] = []
-        self.total_db: List[float] = []
-        self.bands: List[core.EQBand] = []
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, format: str, *args) -> None:
+        return
 
-    def set_profile(self, profile: core.EQProfile) -> None:
-        self.freqs, self.raw_db, self.total_db = core.compute_response_curve(profile)
-        self.bands = profile.bands
-        self.update()
+    def _send(self, raw: bytes, ctype: str, status: int = HTTPStatus.OK) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
 
-    def paintEvent(self, event) -> None:
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        w, h = self.width(), self.height()
-        pad_l, pad_r, pad_t, pad_b = 44, 16, 16, 26
-        pw, ph = max(10, w - pad_l - pad_r), max(10, h - pad_t - pad_b)
-        p.fillRect(self.rect(), QColor("#121418"))
+    def _send_json(self, data: dict, status: int = HTTPStatus.OK) -> None:
+        self._send(json.dumps(data).encode("utf-8"), "application/json; charset=utf-8", status)
 
-        min_db, max_db = -15.0, 15.0
-        if self.total_db or self.raw_db:
-            all_vals = self.total_db + self.raw_db
-            span = max(15.0, math.ceil(max(abs(max(all_vals)), abs(min(all_vals))) / 5.0) * 5.0)
-            min_db, max_db = -span, span
+    def _read_json(self) -> dict:
+        n = int(self.headers.get("Content-Length", "0"))
+        return json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
 
-        def x_for_freq(f: float) -> float:
-            f = max(20.0, min(20000.0, f))
-            return pad_l + pw * (math.log10(f / 20.0) / math.log10(20000.0 / 20.0))
-
-        def y_for_db(db: float) -> float:
-            db = max(min_db, min(max_db, db))
-            return pad_t + ph * (1.0 - (db - min_db) / (max_db - min_db))
-
-        p.setFont(QFont("Inter", 9))
-        for gf in (20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000):
-            x = x_for_freq(gf)
-            p.setPen(QPen(QColor("#222630"), 1))
-            p.drawLine(int(x), pad_t, int(x), pad_t + ph)
-            p.setPen(QColor("#7d8699"))
-            p.drawText(int(x) - 14, h - 6, 28, 16, Qt.AlignmentFlag.AlignCenter, f"{gf // 1000}k" if gf >= 1000 else str(gf))
-
-        step = 5.0 if (max_db - min_db) <= 30.0 else 10.0
-        db_val = min_db
-        while db_val <= max_db + 0.01:
-            y = y_for_db(db_val)
-            p.setPen(QPen(QColor("#434b5c"), 1.5, Qt.PenStyle.DashLine) if abs(db_val) < 0.01 else QPen(QColor("#222630"), 1))
-            p.drawLine(pad_l, int(y), pad_l + pw, int(y))
-            p.setPen(QColor("#7d8699"))
-            p.drawText(2, int(y) - 8, pad_l - 6, 16, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, f"{int(db_val):+d}")
-            db_val += step
-
-        if not self.freqs:
-            return
-
-        raw_path = QPainterPath()
-        for i, (f, db) in enumerate(zip(self.freqs, self.raw_db)):
-            pt = QPointF(x_for_freq(f), y_for_db(db))
-            raw_path.moveTo(pt) if i == 0 else raw_path.lineTo(pt)
-        p.setPen(QPen(QColor("#6a7387"), 1.5, Qt.PenStyle.DotLine))
-        p.drawPath(raw_path)
-
-        tot_path = QPainterPath()
-        for i, (f, db) in enumerate(zip(self.freqs, self.total_db)):
-            pt = QPointF(x_for_freq(f), y_for_db(db))
-            tot_path.moveTo(pt) if i == 0 else tot_path.lineTo(pt)
-
-        peak = max(self.total_db)
-        curve_color = QColor("#f59e0b") if peak > 0.1 else QColor("#38bdf8")
-        p.setPen(QPen(curve_color, 2.4))
-        p.drawPath(tot_path)
-
-        for b in self.bands:
-            if b.enabled:
-                p.setBrush(QColor("#38bdf8"))
-                p.setPen(QPen(QColor("#121418"), 1.5))
-                p.drawEllipse(QPointF(x_for_freq(b.freq), y_for_db(b.gain)), 4.0, 4.0)
-
-        badge = f"Peak (with preamp): {peak:+.2f} dB" + ("  [Clipping Risk — Click Auto-Preamp]" if peak > 0.1 else "")
-        p.setPen(curve_color)
-        p.setFont(QFont("Inter", 10, QFont.Weight.DemiBold))
-        p.drawText(pad_l + 8, pad_t + 2, pw - 16, 18, Qt.AlignmentFlag.AlignRight, badge)
-
-
-class WorkerThread(QThread):
-    finished = pyqtSignal(bool, str)
-
-    def __init__(self, fn, *args, **kwargs):
-        super().__init__()
-        self.fn, self.args, self.kwargs = fn, args, kwargs
-
-    def run(self) -> None:
-        try:
-            ok, msg = self.fn(*self.args, **self.kwargs)
-        except Exception as exc:
-            ok, msg = False, str(exc)
-        self.finished.emit(ok, msg)
-
-
-class MainWindow(QMainWindow):
-    def __init__(self, start_in_tray: bool = False):
-        super().__init__()
-        self.setWindowTitle("PipeWire Parametric EQ")
-        self.resize(860, 650)
-        self.setAcceptDrops(True)
-        self._worker: WorkerThread | None = None
-        self._current_profile: core.EQProfile | None = None
-        self._updating_ui = False
-
-        self._build_ui()
-        self._setup_tray()
-        self._reload_sinks()
-        self._reload_profiles()
-        self._refresh_status()
-
-        if start_in_tray and QSystemTrayIcon.isSystemTrayAvailable():
-            self.hide()
-
-    def _build_ui(self) -> None:
-        root = QWidget()
-        self.setCentralWidget(root)
-        main_layout = QVBoxLayout(root)
-        main_layout.setContentsMargins(14, 14, 14, 14)
-        main_layout.setSpacing(10)
-
-        top_card = QFrame()
-        top_card.setObjectName("card")
-        top_lay = QVBoxLayout(top_card)
-        top_lay.setContentsMargins(12, 12, 12, 12)
-        top_lay.setSpacing(10)
-
-        row1 = QHBoxLayout()
-        self.toggle_btn = QPushButton("EQ: OFF")
-        self.toggle_btn.setObjectName("toggleOff")
-        self.toggle_btn.clicked.connect(self.on_toggle_eq)
-
-        self.profile_combo = QComboBox()
-        self.profile_combo.setMinimumWidth(220)
-        self.profile_combo.currentTextChanged.connect(self.on_profile_selected)
-
-        btn_import = QPushButton("Import Preset")
-        btn_import.clicked.connect(self.on_import_file)
-        btn_paste = QPushButton("Paste Preset")
-        btn_paste.clicked.connect(self.on_paste_clipboard)
-        btn_del = QPushButton("Delete")
-        btn_del.clicked.connect(self.on_delete_profile)
-
-        self.apply_btn = QPushButton("Apply")
-        self.apply_btn.setObjectName("primaryBtn")
-        self.apply_btn.clicked.connect(self.on_apply_clicked)
-
-        row1.addWidget(self.toggle_btn)
-        row1.addWidget(QLabel("Profile:"))
-        row1.addWidget(self.profile_combo, 1)
-        row1.addWidget(btn_import)
-        row1.addWidget(btn_paste)
-        row1.addWidget(btn_del)
-        row1.addWidget(self.apply_btn)
-        top_lay.addLayout(row1)
-
-        row2 = QHBoxLayout()
-        row2.addWidget(QLabel("Output Target:"))
-        self.sink_combo = QComboBox()
-        self.sink_combo.currentIndexChanged.connect(self.on_sink_changed)
-        btn_refresh = QPushButton("↻")
-        btn_refresh.setFixedWidth(34)
-        btn_refresh.clicked.connect(self._reload_sinks)
-
-        self.smart_cb = QCheckBox("Smart Filter mode (single hardware volume slider)")
-        self.smart_cb.toggled.connect(self.on_smart_toggled)
-
-        row2.addWidget(self.sink_combo, 1)
-        row2.addWidget(btn_refresh)
-        row2.addSpacing(12)
-        row2.addWidget(self.smart_cb)
-        top_lay.addLayout(row2)
-        main_layout.addWidget(top_card)
-
-        plot_card = QFrame()
-        plot_card.setObjectName("card")
-        plot_lay = QVBoxLayout(plot_card)
-        plot_lay.setContentsMargins(8, 8, 8, 8)
-        self.plot = ResponsePlot()
-        plot_lay.addWidget(self.plot)
-        main_layout.addWidget(plot_card)
-
-        self.tabs = QTabWidget()
-        main_layout.addWidget(self.tabs, 1)
-
-        tab_bands = QWidget()
-        tb_lay = QVBoxLayout(tab_bands)
-        preamp_row = QHBoxLayout()
-        preamp_row.addWidget(QLabel("Preamp Gain (dB):"))
-        self.preamp_spin = QDoubleSpinBox()
-        self.preamp_spin.setRange(-30.0, 20.0)
-        self.preamp_spin.setSingleStep(0.5)
-        self.preamp_spin.setDecimals(2)
-        self.preamp_spin.valueChanged.connect(self.on_preamp_changed)
-
-        btn_auto_preamp = QPushButton("Auto-Preamp (No Clipping)")
-        btn_auto_preamp.clicked.connect(self.on_auto_preamp)
-        hint = QLabel("Tip: Drag & drop any AutoEQ / Squiglink / PEQdB .txt file onto this window")
-        hint.setObjectName("muted")
-
-        preamp_row.addWidget(self.preamp_spin)
-        preamp_row.addWidget(btn_auto_preamp)
-        preamp_row.addStretch(1)
-        preamp_row.addWidget(hint)
-        tb_lay.addLayout(preamp_row)
-
-        self.bands_table = QTableWidget(0, 5)
-        self.bands_table.setHorizontalHeaderLabels(["Active", "Type", "Freq (Hz)", "Gain (dB)", "Q"])
-        self.bands_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.bands_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        self.bands_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.bands_table.itemChanged.connect(self.on_band_item_changed)
-        tb_lay.addWidget(self.bands_table)
-        self.tabs.addTab(tab_bands, "Bands & Preamp")
-
-        tab_raw = QWidget()
-        tr_lay = QVBoxLayout(tab_raw)
-        self.raw_edit = QPlainTextEdit()
-        self.raw_edit.setFont(QFont("JetBrains Mono, Monospace", 10))
-        raw_btn_row = QHBoxLayout()
-        btn_save_raw = QPushButton("Save Text & Apply")
-        btn_save_raw.setObjectName("primaryBtn")
-        btn_save_raw.clicked.connect(self.on_save_raw_and_apply)
-        raw_btn_row.addStretch(1)
-        raw_btn_row.addWidget(btn_save_raw)
-        tr_lay.addWidget(self.raw_edit)
-        tr_lay.addLayout(raw_btn_row)
-        self.tabs.addTab(tab_raw, "Raw Preset Editor")
-
-        tab_info = QWidget()
-        ti_lay = QVBoxLayout(tab_info)
-        self.autostart_cb = QCheckBox("Start minimized in System Tray on login")
-        self.autostart_cb.setChecked(core.AUTOSTART_FILE.exists())
-        self.autostart_cb.toggled.connect(core.set_autostart_tray)
-        ti_lay.addWidget(self.autostart_cb)
-
-        info_lbl = QLabel(
-            f"<b>PipeWire Engine:</b> <code>libpipewire-module-filter-chain</code> (<code>param_eq</code>)<br>"
-            f"<b>Systemd Service:</b> <code>systemctl --user status {core.SERVICE_NAME}</code><br>"
-            f"<b>Profiles Folder:</b> <code>{core.PROFILES_DIR}</code><br>"
-            f"<b>CLI / Hotkey Toggle:</b> <code>pw-eq toggle</code>"
-        )
-        info_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        ti_lay.addWidget(info_lbl)
-
-        btn_view_conf = QPushButton("Refresh Active PipeWire Config Preview")
-        btn_view_conf.clicked.connect(self._refresh_conf_preview)
-        ti_lay.addWidget(btn_view_conf)
-        self.conf_preview = QPlainTextEdit()
-        self.conf_preview.setReadOnly(True)
-        self.conf_preview.setFont(QFont("JetBrains Mono, Monospace", 9))
-        ti_lay.addWidget(self.conf_preview)
-        self.tabs.addTab(tab_info, "Settings & PipeWire Config")
-
-        self.status_bar = self.statusBar()
-        self.status_bar.showMessage("Ready")
-
-    def _setup_tray(self) -> None:
-        self.tray = QSystemTrayIcon(self)
-        self.tray.setIcon(make_tray_icon(False))
-        self.tray.activated.connect(self._on_tray_activated)
-        self.tray_menu = QMenu()
-        self._rebuild_tray_menu()
-        self.tray.setContextMenu(self.tray_menu)
-        if QSystemTrayIcon.isSystemTrayAvailable():
-            self.tray.show()
-
-    def _rebuild_tray_menu(self) -> None:
-        self.tray_menu.clear()
-        running = core.is_eq_running()
-        active = core.load_state().get("active_profile", "")
-        act_toggle = QAction("Disable EQ (Bypass)" if running else "Enable EQ", self)
-        act_toggle.triggered.connect(self.on_toggle_eq)
-        self.tray_menu.addAction(act_toggle)
-        self.tray_menu.addSeparator()
-
-        prof_menu = self.tray_menu.addMenu("Switch Profile")
-        for p in core.list_profiles():
-            act = QAction(p, self)
-            act.setCheckable(True)
-            act.setChecked(p == active and running)
-            act.triggered.connect(lambda checked=False, name=p: self._switch_profile_from_tray(name))
-            prof_menu.addAction(act)
-
-        self.tray_menu.addSeparator()
-        act_show = QAction("Open Window", self)
-        act_show.triggered.connect(self._show_window)
-        act_quit = QAction("Quit Tray App", self)
-        act_quit.triggered.connect(QApplication.quit)
-        self.tray_menu.addAction(act_show)
-        self.tray_menu.addAction(act_quit)
-
-    def _on_tray_activated(self, reason) -> None:
-        if reason == QSystemTrayIcon.ActivationReason.Trigger:
-            self.hide() if self.isVisible() else self._show_window()
-
-    def _show_window(self) -> None:
-        self.show()
-        self.raise_()
-        self.activateWindow()
-
-    def closeEvent(self, event) -> None:
-        if QSystemTrayIcon.isSystemTrayAvailable():
-            event.ignore()
-            self.hide()
+    def do_GET(self) -> None:
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/":
+            self._send(HTML.encode("utf-8"), "text/html; charset=utf-8")
+        elif parsed.path == "/api/state":
+            sinks, _, _ = core.get_pw_sinks_and_defaults()
+            self._send_json({
+                "running": core.is_eq_running(), "state": core.load_state(), "profiles": core.list_profiles(),
+                "sinks": [s for s in sinks if not core.is_eq_node(s["name"])],
+                "active_conf": core.ACTIVE_CONF.read_text(encoding="utf-8") if core.ACTIVE_CONF.exists() else "",
+                "profiles_dir": str(core.PROFILES_DIR), "service_name": core.SERVICE_NAME,
+            })
+        elif parsed.path == "/api/profile":
+            name = urllib.parse.parse_qs(parsed.query).get("name", [""])[0]
+            if not name or name not in core.list_profiles():
+                self._send_json({"error": "Profile not found"}, HTTPStatus.NOT_FOUND)
+            else:
+                self._send_json(_serialize_profile(core.load_profile(name)))
         else:
-            event.accept()
+            self.send_error(HTTPStatus.NOT_FOUND)
 
-    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-
-    def dropEvent(self, event: QDropEvent) -> None:
-        for url in event.mimeData().urls():
-            p = Path(url.toLocalFile())
-            if p.is_file():
-                self._import_path(p)
-                break
-
-    def _reload_sinks(self) -> None:
-        self._updating_ui = True
-        state = core.load_state()
-        saved_target = state.get("target_node", "")
-        self.smart_cb.setChecked(state.get("smart_filter", True))
-        self.sink_combo.clear()
-        self.sink_combo.addItem("Auto (Follow Default Hardware Output)", "")
-        sinks, _, _ = core.get_pw_sinks_and_defaults()
-        sel_idx = 0
-        for s in sinks:
-            if core.is_eq_node(s["name"]):
-                continue
-            self.sink_combo.addItem(s["description"], s["name"])
-            if s["name"] == saved_target:
-                sel_idx = self.sink_combo.count() - 1
-        self.sink_combo.setCurrentIndex(sel_idx)
-        self._updating_ui = False
-
-    def _reload_profiles(self, select_name: str | None = None) -> None:
-        self._updating_ui = True
-        profiles = core.list_profiles()
-        target = select_name or core.load_state().get("active_profile", "")
-        self.profile_combo.clear()
-        self.profile_combo.addItems(profiles)
-        if target in profiles:
-            self.profile_combo.setCurrentText(target)
-        elif profiles:
-            self.profile_combo.setCurrentIndex(0)
-        self._updating_ui = False
-
-        if self.profile_combo.currentText():
-            self._load_selected_profile(self.profile_combo.currentText())
-        else:
-            self._current_profile = None
-            self.bands_table.setRowCount(0)
-            self.raw_edit.clear()
-            self.plot.set_profile(core.EQProfile("Empty"))
-
-    def _load_selected_profile(self, name: str) -> None:
-        if not name:
-            return
-        try:
-            prof = core.load_profile(name)
-        except Exception as exc:
-            self.status_bar.showMessage(f"Error loading {name}: {exc}")
-            return
-        self._current_profile = prof
-        self._updating_ui = True
-        self.preamp_spin.setValue(prof.preamp)
-        self.raw_edit.setPlainText(prof.raw_text)
-        self.bands_table.setRowCount(len(prof.bands))
-        for r, b in enumerate(prof.bands):
-            chk = QTableWidgetItem()
-            chk.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
-            chk.setCheckState(Qt.CheckState.Checked if b.enabled else Qt.CheckState.Unchecked)
-            self.bands_table.setItem(r, 0, chk)
-            vals = [b.raw_type, f"{b.freq:.1f}", f"{b.gain:+.2f}" if b.pw_type not in core.NO_GAIN_TYPES else "—", f"{b.q:.3f}"]
-            for c, val in enumerate(vals, start=1):
-                it = QTableWidgetItem(val)
-                it.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
-                self.bands_table.setItem(r, c, it)
-        self._updating_ui = False
-        self.plot.set_profile(prof)
-        self.status_bar.showMessage(" | ".join(prof.warnings[:2]) if prof.warnings else f"Loaded '{name}' ({len(prof.bands)} bands)")
-
-    def _refresh_status(self) -> None:
-        running = core.is_eq_running()
-        active = core.load_state().get("active_profile", "")
-        self.toggle_btn.setText(f"EQ: ON ({active})" if (running and active) else ("EQ: ON" if running else "EQ: OFF (Bypassed)"))
-        self.toggle_btn.setObjectName("toggleOn" if running else "toggleOff")
-        self.toggle_btn.style().unpolish(self.toggle_btn)
-        self.toggle_btn.style().polish(self.toggle_btn)
-        self.tray.setIcon(make_tray_icon(running))
-        self.tray.setToolTip(f"PipeWire EQ: {'ON — ' + active if running else 'OFF'}")
-        self._rebuild_tray_menu()
-        self._refresh_conf_preview()
-
-    def _refresh_conf_preview(self) -> None:
-        self.conf_preview.setPlainText(core.ACTIVE_CONF.read_text(encoding="utf-8") if core.ACTIVE_CONF.exists() else "(No active.conf generated yet)")
-
-    def _run_bg(self, fn, *args, **kwargs) -> None:
-        if self._worker and self._worker.isRunning():
-            return
-        self.apply_btn.setEnabled(False)
-        self.toggle_btn.setEnabled(False)
-        self.status_bar.showMessage("Updating PipeWire filter-chain...")
-        self._worker = WorkerThread(fn, *args, **kwargs)
-        self._worker.finished.connect(self._on_bg_done)
-        self._worker.start()
-
-    def _on_bg_done(self, ok: bool, msg: str) -> None:
-        self.apply_btn.setEnabled(True)
-        self.toggle_btn.setEnabled(True)
-        self.status_bar.showMessage(msg)
-        self._refresh_status()
-        if not ok:
-            QMessageBox.warning(self, "PipeWire EQ Error", msg)
-
-    def _switch_profile_from_tray(self, name: str) -> None:
-        self._reload_profiles(select_name=name)
-        self._run_bg(core.apply_profile, name)
-
-    def on_profile_selected(self, name: str) -> None:
-        if not self._updating_ui and name:
-            self._load_selected_profile(name)
-
-    def on_sink_changed(self) -> None:
-        if not self._updating_ui:
-            state = core.load_state()
-            state["target_node"] = self.sink_combo.currentData() or ""
-            core.save_state(state)
-
-    def on_smart_toggled(self, checked: bool) -> None:
-        if not self._updating_ui:
-            state = core.load_state()
-            state["smart_filter"] = checked
-            core.save_state(state)
-
-    def on_preamp_changed(self, val: float) -> None:
-        if not self._updating_ui and self._current_profile:
-            self._current_profile.preamp = val
-            self._sync_profile_to_disk()
-
-    def on_auto_preamp(self) -> None:
-        if self._current_profile:
-            self.preamp_spin.setValue(core.recommended_preamp(self._current_profile))
-
-    def on_band_item_changed(self, item: QTableWidgetItem) -> None:
-        if not self._updating_ui and self._current_profile and item.column() == 0:
-            row = item.row()
-            if 0 <= row < len(self._current_profile.bands):
-                self._current_profile.bands[row].enabled = item.checkState() == Qt.CheckState.Checked
-                self._sync_profile_to_disk()
-
-    def _sync_profile_to_disk(self) -> None:
-        if not self._current_profile:
-            return
-        new_text = core.format_eq_text(self._current_profile)
-        self._current_profile.raw_text = new_text
-        self._updating_ui = True
-        self.raw_edit.setPlainText(new_text)
-        self._updating_ui = False
-        core.save_profile_text(self._current_profile.name, new_text)
-        self.plot.set_profile(self._current_profile)
-
-    def on_save_raw_and_apply(self) -> None:
-        name = self.profile_combo.currentText()
-        if not name:
-            name, ok = QInputDialog.getText(self, "Profile Name", "Enter a name for this EQ profile:")
-            if not ok or not name.strip():
-                return
-            name = name.strip()
-        core.save_profile_text(name, self.raw_edit.toPlainText())
-        self._reload_profiles(select_name=name)
-        self._run_bg(core.apply_profile, name)
-
-    def on_apply_clicked(self) -> None:
-        name = self.profile_combo.currentText()
-        if not name:
-            QMessageBox.information(self, "No Profile", "Import or paste a preset first.")
-            return
-        self._run_bg(core.apply_profile, name)
-
-    def on_toggle_eq(self) -> None:
-        if core.is_eq_running():
-            self._run_bg(core.stop_eq)
-        else:
-            name = self.profile_combo.currentText() or core.load_state().get("active_profile", "")
+    def do_POST(self) -> None:
+        b = self._read_json()
+        if self.path == "/api/profile/save":
+            name, text = b.get("name", "").strip(), b.get("text", "")
             if not name:
-                QMessageBox.information(self, "No Profile", "Import a preset first.")
+                self._send_json({"ok": False, "message": "Missing profile name"})
                 return
-            self._run_bg(core.apply_profile, name)
-
-    def _import_path(self, path: Path) -> None:
-        text = path.read_text(encoding="utf-8", errors="replace")
-        name, ok = QInputDialog.getText(self, "Import Preset", "Profile name:", text=path.stem)
-        if not ok or not name.strip():
-            return
-        name = name.strip()
-        core.save_profile_text(name, text)
-        self._reload_profiles(select_name=name)
-        self._run_bg(core.apply_profile, name)
-
-    def on_import_file(self) -> None:
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Import Parametric EQ Preset", str(Path.home()), "EQ Files (*.txt *.apo);;All Files (*)"
-        )
-        if file_path:
-            self._import_path(Path(file_path))
-
-    def on_paste_clipboard(self) -> None:
-        text = QApplication.clipboard().text()
-        if not text.strip():
-            QMessageBox.information(self, "Empty Clipboard", "Copy your Equalizer APO / AutoEQ preset text first.")
-            return
-        if not core.parse_eq_text(text).bands:
-            QMessageBox.warning(self, "No Filters Found", "Clipboard text did not contain valid Equalizer APO Filter lines.")
-            return
-        name, ok = QInputDialog.getText(self, "Save Pasted EQ", "Profile name:")
-        if not ok or not name.strip():
-            return
-        name = name.strip()
-        core.save_profile_text(name, text)
-        self._reload_profiles(select_name=name)
-        self._run_bg(core.apply_profile, name)
-
-    def on_delete_profile(self) -> None:
-        name = self.profile_combo.currentText()
-        if not name:
-            return
-        if QMessageBox.question(self, "Delete Profile", f"Delete '{name}'?") == QMessageBox.StandardButton.Yes:
+            core.save_profile_text(name, text)
+            ok, msg = core.apply_profile(name) if b.get("apply") else (True, f"Saved '{name}'")
+            self._send_json({"ok": ok, "message": msg})
+        elif self.path == "/api/profile/preamp":
+            prof = core.load_profile(b["name"])
+            prof.preamp = float(b["preamp"])
+            prof.raw_text = core.format_eq_text(prof)
+            core.save_profile_text(prof.name, prof.raw_text)
+            self._send_json(_serialize_profile(prof))
+        elif self.path == "/api/profile/toggle_band":
+            prof = core.load_profile(b["name"])
+            idx = int(b["index"])
+            if 0 <= idx < len(prof.bands):
+                prof.bands[idx].enabled = bool(b["enabled"])
+                prof.raw_text = core.format_eq_text(prof)
+                core.save_profile_text(prof.name, prof.raw_text)
+            self._send_json(_serialize_profile(prof))
+        elif self.path == "/api/profile/delete":
+            name = b.get("name", "")
             was_active = core.is_eq_running() and core.load_state().get("active_profile") == name
             core.delete_profile(name)
             if was_active:
-                self._run_bg(core.stop_eq)
-            self._reload_profiles()
+                core.stop_eq()
+            self._send_json({"ok": True, "message": f"Deleted '{name}'"})
+        elif self.path == "/api/apply":
+            ok, msg = core.apply_profile(b["name"])
+            self._send_json({"ok": ok, "message": msg})
+        elif self.path == "/api/toggle_eq":
+            if core.is_eq_running():
+                ok, msg = core.stop_eq()
+            else:
+                name = b.get("name") or core.load_state().get("active_profile", "")
+                ok, msg = core.apply_profile(name) if name else (False, "No profile selected")
+            self._send_json({"ok": ok, "message": msg})
+        elif self.path == "/api/settings":
+            state = core.load_state()
+            state["target_node"], state["smart_filter"] = b.get("target_node", ""), bool(b.get("smart_filter", True))
+            core.save_state(state)
+            self._send_json({"ok": True, "message": "Saved output settings (click Apply to reload)"})
+        elif self.path == "/api/quit":
+            self._send_json({"ok": True})
+            threading.Thread(target=self.server.shutdown, daemon=True).start()
+        else:
+            self.send_error(HTTPStatus.NOT_FOUND)
 
 
 def main() -> int:
-    app = QApplication(sys.argv)
-    app.setStyleSheet(DARK_QSS)
-    if QSystemTrayIcon.isSystemTrayAvailable():
-        app.setQuitOnLastWindowClosed(False)
-    win = MainWindow(start_in_tray=("--tray" in sys.argv))
-    if "--tray" not in sys.argv:
-        win.show()
-    return app.exec()
+    ap = argparse.ArgumentParser(prog="pw-eq-gui", description="Local Web UI for pw-eq")
+    ap.add_argument("--port", type=int, default=0, help="Port to listen on (default: auto)")
+    ap.add_argument("--no-browser", action="store_true", help="Do not auto-open browser")
+    args = ap.parse_args()
+    core.ensure_dirs()
+    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    url = f"http://127.0.0.1:{server.server_address[1]}"
+    print(f"pw-eq-gui running at {url} (Press Ctrl+C to stop)")
+    if not args.no_browser:
+        threading.Timer(0.15, lambda: webbrowser.open(url)).start()
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+    return 0
 
 
 if __name__ == "__main__":
