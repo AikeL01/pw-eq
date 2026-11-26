@@ -17,9 +17,8 @@ for arg in "$@"; do
 done
 
 echo "==> Stopping pw-eq GUI and service..."
-pkill -f "pw-eq-gui" 2>/dev/null || true
+pkill -f "[p]w-eq-gui" 2>/dev/null || true
 
-# Cleanly stop service and restore previous hardware default sink if core is present
 python3 - <<'PY' 2>/dev/null || true
 import sys
 from pathlib import Path
@@ -51,7 +50,7 @@ if [[ -d "$CFG_DIR" ]]; then
         rm -rf "$CFG_DIR"
         echo "==> Removed saved profiles ($CFG_DIR)."
     elif ! $KEEP_PROFILES && [[ -t 0 ]] && [[ -n "$(ls -A "$CFG_DIR/profiles" 2>/dev/null || true)" ]]; then
-        read -r -p "Also delete saved EQ profiles in $CFG_DIR/profiles? [y/N] " ans
+        read -r -p "Also delete saved EQ profiles in $CFG_DIR/profiles? [y/N] " ans || ans=""
         if [[ "$ans" =~ ^[Yy]$ ]]; then
             rm -rf "$CFG_DIR"
             echo "==> Removed saved profiles."
@@ -61,7 +60,9 @@ if [[ -d "$CFG_DIR" ]]; then
     else
         rmdir "$CFG_DIR/profiles" 2>/dev/null || true
         rmdir "$CFG_DIR" 2>/dev/null || true
-        [[ -d "$CFG_DIR/profiles" ]] && echo "==> Kept saved profiles in $CFG_DIR/profiles."
+        if [[ -d "$CFG_DIR/profiles" ]]; then
+            echo "==> Kept saved profiles in $CFG_DIR/profiles."
+        fi
     fi
 fi
 
