@@ -5,7 +5,6 @@ import cmath
 import json
 import math
 import re
-import shutil
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -18,7 +17,6 @@ ACTIVE_CONF = CONFIG_DIR / "active.conf"
 STATE_FILE = CONFIG_DIR / "state.json"
 SERVICE_NAME = "pw-eq.service"
 SERVICE_FILE = Path.home() / ".config" / "systemd" / "user" / SERVICE_NAME
-AUTOSTART_FILE = Path.home() / ".config" / "autostart" / "pw-eq-tray.desktop"
 
 EQ_INPUT_NODE = "effect_input.pw_eq_smart"
 LEGACY_EQ_INPUT_NODE = "effect_input.pw_eq"
@@ -43,7 +41,6 @@ class EQBand:
     freq: float
     gain: float = 0.0
     q: float = 0.7071
-    line_index: int = -1
 
 
 @dataclass
@@ -124,7 +121,6 @@ def parse_eq_text(text: str, name: str = "Untitled") -> EQProfile:
                 q = _slope_to_q(_num(sm.group(1)), gain)
             else:
                 q = 0.7071 if pw_type in NO_GAIN_TYPES or pw_type in ("bq_lowshelf", "bq_highshelf") else 1.0
-            profile.bands.append(EQBand(enabled, raw_type, pw_type, freq, gain, max(q, 0.05), idx))
     return profile
 
 
@@ -452,24 +448,3 @@ def stop_eq(disable_on_boot: bool = True) -> Tuple[bool, str]:
         _run(["systemctl", "--user", "disable", SERVICE_NAME])
     _restore_hardware_default(state)
     return True, "Parametric EQ disabled (bypassed)."
-
-
-def set_autostart_tray(enabled: bool) -> None:
-    AUTOSTART_FILE.parent.mkdir(parents=True, exist_ok=True)
-    if enabled:
-        gui_cmd = shutil.which("pw-eq-gui") or str(Path.home() / ".local" / "bin" / "pw-eq-gui")
-        AUTOSTART_FILE.write_text(
-            f"""[Desktop Entry]
-Type=Application
-Name=PipeWire Parametric EQ (Tray)
-Comment=System tray controller for PipeWire Parametric EQ
-Exec={gui_cmd} --tray
-Icon=audio-card
-Terminal=false
-Categories=AudioVideo;Audio;
-X-GNOME-Autostart-enabled=true
-""",
-            encoding="utf-8",
-        )
-    elif AUTOSTART_FILE.exists():
-        AUTOSTART_FILE.unlink()
