@@ -25,5 +25,6 @@ Loads Equalizer APO / AutoEQ / Squiglink / PEQdB `.txt` presets directly into Pi
 ```
 
 ## Cleanup
-```systemctl --user disable --now pw-eq.service && rm -rf ~/.config/pw-eq ~/.config/systemd/user/pw-eq.service) or a built-in ./pw-eq-gui --cleanup flag.
+```
+systemctl --user disable --now pw-eq.service && rm -rf ~/.config/pw-eq ~/.config/systemd/user/pw-eq.service
 ```
