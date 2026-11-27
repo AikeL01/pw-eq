@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import threading
 import urllib.parse
@@ -18,94 +19,65 @@ for _p in (Path(__file__).resolve().parent, Path.home() / ".local" / "lib" / "pw
 
 import pw_eq_core as core
 
-
 HTML = r"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PipeWire Parametric EQ</title>
 <style>
   :root {
-    --bg: #0f172a;
-    --surf: #1e293b;
-    --surf2: #263348;
-    --surf3: #334155;
-    --outline: #3f4f66;
-    --text: #e2e8f0;
-    --muted: #94a3b8;
-    --primary: #38bdf8;
-    --on-primary: #082f49;
-    --primary-cont: #0c4a6e;
-    --on-primary-cont: #bae6fd;
-    --ok: #34d399;
-    --ok-cont: #064e3b;
-    --err: #f87171;
-    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    --mono: ui-monospace, "JetBrains Mono", "Cascadia Code", monospace;
+    --bg:#121318; --surf:#1b1d24; --surf2:#242731; --surf3:#2e323f; --outline:#3c404f;
+    --text:#e4e6ee; --muted:#9aa0b4; --primary:#a8c7fa; --on-primary:#0b2854;
+    --primary-cont:#233d63; --on-primary-cont:#d6e3ff;
+    --ok:#7dd88b; --ok-cont:#1d3b24; --err:#f28b82;
+    --warn:#f5c26b; --warn-cont:#3b2e16;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 13px/1.45 var(--sans); min-height: 100vh;
-  }
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 14px 16px 20px; display: flex; flex-direction: column; gap: 10px; }
-  .card {
-    background: var(--surf); border: 1px solid #2d3b4e; border-radius: 12px;
-    padding: 12px 14px;
-  }
-  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-  .row + .row { margin-top: 8px; }
-  .grow { flex: 1 1 200px; min-width: 140px; }
-  .lbl { color: var(--muted); font-size: 12px; font-weight: 500; white-space: nowrap; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:13px/1.45 var(--sans); }
+  .wrap { max-width:1040px; margin:0 auto; padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
+  .card { background:var(--surf); border-radius:14px; padding:12px 14px; }
+  .row { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+  .row + .row { margin-top:8px; }
+  .grow { flex:1 1 200px; min-width:140px; }
+  .lbl { color:var(--muted); font-size:12px; font-weight:600; }
   select, input[type="number"], input[type="text"], textarea {
-    background: var(--surf2); color: var(--text); border: 1px solid var(--outline);
-    border-radius: 8px; padding: 6px 10px; font: inherit; outline: none;
+    background:var(--surf2); color:var(--text); border:1px solid var(--outline);
+    border-radius:10px; padding:6px 10px; font:inherit; outline:none;
   }
-  select:focus, input:focus, textarea:focus { border-color: var(--primary); }
+  select:focus, input:focus, textarea:focus { border-color:var(--primary); }
   button {
-    background: var(--surf2); color: var(--text); border: 1px solid var(--outline);
-    border-radius: 8px; padding: 6px 12px; font: 500 13px/1.2 var(--sans);
-    cursor: pointer; transition: background .12s, border-color .12s; white-space: nowrap;
+    border:0; border-radius:18px; padding:7px 14px; font:600 12.5px var(--sans);
+    background:var(--surf2); color:var(--text); cursor:pointer; transition:.12s background;
   }
-  button:hover { background: var(--surf3); }
-  button.primary { background: var(--primary); color: var(--on-primary); border-color: transparent; font-weight: 600; }
-  button.primary:hover { filter: brightness(1.08); }
-  button.tonal { background: var(--primary-cont); color: var(--on-primary-cont); border-color: transparent; }
-  button.on { background: var(--ok-cont); color: var(--ok); border-color: #10b98155; font-weight: 600; }
-  button.off { background: var(--surf3); color: var(--muted); }
-  button.danger:hover { border-color: var(--err); color: var(--err); }
-  label.chk { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--muted); font-size: 12px; }
-  input[type="checkbox"] { accent-color: var(--primary); width: 15px; height: 15px; cursor: pointer; }
-  svg { width: 100%; height: 220px; display: block; background: var(--bg); border-radius: 8px; }
-  .tabs { display: flex; gap: 4px; background: var(--surf3); padding: 3px; border-radius: 10px; width: fit-content; }
-  .tab {
-    padding: 5px 14px; border-radius: 7px; cursor: pointer; color: var(--muted);
-    font-weight: 500; user-select: none; border: none; background: transparent;
-  }
-  .tab:hover { color: var(--text); background: transparent; }
-  .tab.active { background: var(--primary); color: var(--on-primary); font-weight: 600; }
-  .pane { display: none; margin-top: 10px; }
-  .pane.active { display: block; }
-  table { width: 100%; border-collapse: separate; border-spacing: 0 3px; }
-  th, td { padding: 6px 10px; text-align: left; }
-  th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
-  td { background: var(--surf2); }
-  td:first-child { border-radius: 7px 0 0 7px; width: 42px; text-align: center; }
-  td:last-child { border-radius: 0 7px 7px 0; }
-  td.num { font-family: var(--mono); font-size: 12px; }
-  tr:hover td { background: #2d3c54; }
-  textarea {
-    width: 100%; min-height: 290px; font-family: var(--mono); font-size: 12px;
-    line-height: 1.5; resize: vertical;
-  }
-  .foot { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 12px; padding: 0 2px; }
-  body.drag { outline: 2px dashed var(--primary); outline-offset: -6px; }
-  dialog {
-    background: var(--surf); color: var(--text); border: 1px solid var(--outline);
-    border-radius: 12px; padding: 16px; width: min(560px, 92vw);
-  }
-  dialog::backdrop { background: rgba(0, 0, 0, .6); }
+  button:hover { background:var(--surf3); }
+  button.primary { background:var(--primary); color:var(--on-primary); }
+  button.primary:hover { filter:brightness(1.06); }
+  button.tonal { background:var(--primary-cont); color:var(--on-primary-cont); }
+  button.on { background:var(--ok-cont); color:var(--ok); }
+  button.off { background:var(--surf3); color:var(--muted); }
+  button.danger:hover { color:var(--err); }
+  label.chk { display:inline-flex; align-items:center; gap:6px; cursor:pointer; color:var(--muted); font-size:12.5px; }
+  input[type="checkbox"] { accent-color:var(--primary); width:15px; height:15px; cursor:pointer; }
+  svg { width:100%; height:290px; display:block; background:var(--bg); border-radius:10px; }
+  .warn { background:var(--warn-cont); color:var(--warn); border-radius:10px; padding:7px 10px; font-size:12px; margin-bottom:8px; }
+  .tabs { display:inline-flex; background:var(--surf3); border-radius:18px; padding:3px; gap:2px; margin-bottom:8px; }
+  .tab { padding:5px 14px; border-radius:15px; font:600 12.5px var(--sans); color:var(--muted); cursor:pointer; border:0; background:transparent; }
+  .tab:hover { color:var(--text); background:transparent; }
+  .tab.active { background:var(--primary); color:var(--on-primary); }
+  .pane { display:none; } .pane.active { display:block; }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  th, td { padding:6px 8px; text-align:left; border-bottom:1px solid var(--surf2); }
+  th { color:var(--muted); font-weight:600; }
+  td.num { font-family:var(--mono); text-align:right; }
+  tr:hover td { background:var(--surf2); }
+  textarea { width:100%; min-height:240px; font:12.5px/1.5 var(--mono); resize:vertical; }
+  .foot { display:flex; justify-content:space-between; color:var(--muted); font-size:12px; padding:2px 4px; }
+  body.drag { outline:2px dashed var(--primary); outline-offset:-6px; }
+  dialog { background:var(--surf); color:var(--text); border:1px solid var(--outline); border-radius:14px; padding:16px; width:min(540px, 92vw); }
+  dialog::backdrop { background:rgba(0,0,0,.6); }
 </style>
 </head>
 <body>
@@ -115,91 +87,102 @@ HTML = r"""<!doctype html>
       <button id="toggleBtn" class="off" onclick="toggleEQ()">EQ: OFF</button>
       <span class="lbl">Profile</span>
       <select id="profileSel" class="grow" onchange="loadProfile(this.value)"></select>
-      <button class="primary" onclick="applySelected()">Apply</button>
-      <input type="file" id="fileInput" accept=".txt" hidden onchange="importFileObj(this.files[0]); this.value=''">
+      <button class="primary" onclick="applySelected()">Apply &amp; Activate</button>
       <button class="tonal" onclick="document.getElementById('fileInput').click()">Import</button>
-      <button onclick="pastePreset()">Paste</button>
+      <button class="tonal" onclick="pastePreset()">Paste</button>
       <button class="danger" onclick="deleteProfile()">Delete</button>
+      <input id="fileInput" type="file" accept=".txt,text/plain" hidden onchange="importFileObj(this.files[0])">
     </div>
     <div class="row">
       <span class="lbl">Target Sink</span>
-      <select id="sinkSel" class="grow" onchange="saveSettings()"></select>
-      <label class="chk" title="Recommended: keeps PipeWire Smart Filter routing active">
-        <input type="checkbox" id="smartCb" onchange="saveSettings()"> Smart Filter
+      <select id="sinkSel" class="grow"></select>
+      <label class="chk" title="Follows your active PipeWire default sink (speakers, headphones, Bluetooth, HDMI).">
+        <input id="smartCb" type="checkbox"> Smart Auto-Follow
       </label>
-      <button onclick="refreshState()">Refresh</button>
-      <button onclick="quitApp()" title="Close this local web server">Quit UI</button>
+      <button onclick="saveSettings()">Save</button>
+      <button class="danger" onclick="quitApp()">Quit</button>
     </div>
   </div>
 
-  <div class="card" style="padding: 10px 12px;">
-    <svg id="plot" viewBox="0 0 960 220" preserveAspectRatio="none"
-         onmousemove="onPlotHover(event)" onmouseleave="hoverText.textContent=''"></svg>
+  <div class="card" style="padding:10px;">
+    <svg id="plot" viewBox="0 0 900 290" onmousemove="onPlotHover(event)" onmouseleave="hoverText=''"></svg>
   </div>
 
   <div class="card">
-    <div class="row" style="justify-content: space-between;">
-      <div class="tabs">
-        <button class="tab active" onclick="switchTab(0)">Bands</button>
-        <button class="tab" onclick="switchTab(1)">Raw EqualizerAPO Text</button>
-        <button class="tab" onclick="switchTab(2)">PipeWire Config</button>
-      </div>
-      <div class="row">
-        <span class="lbl">Preamp (dB)</span>
-        <input type="number" id="preampIn" step="0.1" style="width: 82px; font-family: var(--mono);" onchange="setPreamp(this.value)">
-        <button class="tonal" onclick="autoPreamp()">Auto Preamp</button>
-      </div>
+    <div id="warnBox" class="warn" hidden></div>
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab(0)">Bands</button>
+      <button class="tab" onclick="switchTab(1)">Raw Editor</button>
+      <button class="tab" onclick="switchTab(2)">PipeWire Config</button>
     </div>
 
     <div class="pane active">
-      <div class="lbl" id="bandCount" style="margin-bottom: 6px;"></div>
-      <table>
-        <thead><tr><th>On</th><th>Type</th><th>Freq</th><th>Gain</th><th>Q</th></tr></thead>
-        <tbody id="bandsBody"></tbody>
-      </table>
+      <div class="row" style="margin-bottom:8px;">
+        <span class="lbl">Preamp (dB)</span>
+        <input id="preampIn" type="number" step="0.1" style="width:90px;font-family:var(--mono)">
+        <button class="tonal" onclick="setPreamp()">Set</button>
+        <button onclick="autoPreamp()">Auto Anti-Clip</button>
+        <span id="bandCount" class="lbl" style="margin-left:auto;"></span>
+      </div>
+      <div style="max-height:280px;overflow:auto;">
+        <table>
+          <thead><tr><th>#</th><th>On</th><th>Type</th><th style="text-align:right">Freq (Hz)</th><th style="text-align:right">Gain (dB)</th><th style="text-align:right">Q</th></tr></thead>
+          <tbody id="bandsBody"></tbody>
+        </table>
+      </div>
     </div>
 
     <div class="pane">
       <textarea id="rawEdit" spellcheck="false"></textarea>
-      <div class="row" style="justify-content: flex-end; margin-top: 8px;">
-        <button class="primary" onclick="saveRawAndApply()">Save &amp; Apply Text</button>
+      <div class="row" style="margin-top:8px;">
+        <button class="primary" onclick="saveRawAndApply()">Save Raw &amp; Apply</button>
+        <span class="lbl">Tip: drag &amp; drop any AutoEq / EqualizerAPO .txt file anywhere on this window.</span>
       </div>
     </div>
 
     <div class="pane">
-      <div class="lbl" id="infoMeta" style="margin-bottom: 8px;"></div>
+      <div class="lbl" id="infoMeta" style="margin-bottom:6px;"></div>
       <textarea id="confPreview" readonly spellcheck="false"></textarea>
     </div>
   </div>
 
   <div class="foot">
-    <span id="statusMsg">Ready. Drag &amp; drop any AutoEQ .txt file anywhere on this page.</span>
-    <span id="hoverTxt" style="font-family: var(--mono);"></span>
+    <span id="statusMsg">Ready.</span>
+    <span id="hoverTxt"></span>
   </div>
 </div>
 
 <dialog id="pasteDlg">
-  <div style="font-weight: 600; font-size: 15px; margin-bottom: 10px;">New / Paste EqualizerAPO Preset</div>
-  <div style="display: flex; flex-direction: column; gap: 8px;">
-    <input type="text" id="pasteName" placeholder="Profile name (e.g. HD600 Harman)">
-    <textarea id="pasteBody" style="min-height: 220px;" placeholder="Preamp: -4.0 dB&#10;Filter 1: ON PK Fc 100 Hz Gain 4.0 dB Q 1.41"></textarea>
-    <div class="row" style="justify-content: flex-end;">
-      <button onclick="pasteDlg.close()">Cancel</button>
-      <button class="primary" onclick="submitPasteModal()">Save &amp; Apply</button>
-    </div>
+  <div style="font-weight:600;margin-bottom:8px;">Paste AutoEq / EqualizerAPO Preset</div>
+  <input id="pasteName" type="text" placeholder="Profile Name" style="width:100%;margin-bottom:8px;">
+  <textarea id="pasteBody" placeholder="Preamp: -6.0 dB&#10;Filter 1: ON PK Fc 105 Hz Gain 3.2 dB Q 1.41" style="min-height:180px;"></textarea>
+  <div class="row" style="justify-content:flex-end;margin-top:10px;">
+    <button onclick="pasteDlg.close()">Cancel</button>
+    <button class="primary" onclick="submitPasteModal()">Save &amp; Apply</button>
   </div>
 </dialog>
 
 <script>
 let currentProf = null;
-const hoverText = document.getElementById("hoverTxt");
+let hoverText = "";
+let dragDepth = 0;
 const pasteDlg = document.getElementById("pasteDlg");
 
+function escHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+}
+
 async function api(url, body = null) {
-  const opt = body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {};
-  const r = await fetch(url, opt);
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
+  const opts = body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {};
+  const r = await fetch(url, opts);
+  let data = null;
+  try { data = await r.json(); } catch {}
+  if (!r.ok) {
+    const msg = (data && data.message) || r.statusText || "Request failed";
+    setStatus("Error: " + msg);
+    throw new Error(msg);
+  }
+  return data;
 }
 
 function setStatus(msg) { document.getElementById("statusMsg").textContent = msg; }
@@ -209,213 +192,199 @@ function switchTab(idx) {
   document.querySelectorAll(".pane").forEach((e, i) => e.classList.toggle("active", i === idx));
 }
 
-async function refreshState(keepSelected = true) {
+function clearProfileUI() {
+  currentProf = null;
+  document.getElementById("plot").innerHTML = "";
+  document.getElementById("bandsBody").innerHTML = "";
+  document.getElementById("rawEdit").value = "";
+  document.getElementById("preampIn").value = "0";
+  document.getElementById("bandCount").textContent = "0 bands";
+  document.getElementById("warnBox").hidden = true;
+}
+
+async function refreshState() {
   const st = await api("/api/state");
   const btn = document.getElementById("toggleBtn");
-  btn.textContent = st.running ? "EQ: ON" : "EQ: OFF";
-  btn.className = st.running ? "on" : "off";
+  btn.textContent = st.eq_running ? "EQ: ON" : "EQ: OFF";
+  btn.className = st.eq_running ? "on" : "off";
 
   const pSel = document.getElementById("profileSel");
-  const prevP = keepSelected ? pSel.value : "";
-  pSel.innerHTML = st.profiles.map(p => `<option value="${p}">${p}</option>`).join("");
-  const pickP = st.profiles.includes(prevP) ? prevP : (st.profiles.includes(st.active_profile) ? st.active_profile : st.profiles[0] || "");
-  if (pickP) pSel.value = pickP;
+  pSel.innerHTML = st.profiles.map(p => `<option value="${escHtml(p)}">${escHtml(p)}</option>`).join("");
+  if (st.active_profile && st.profiles.includes(st.active_profile)) pSel.value = st.active_profile;
 
   const sSel = document.getElementById("sinkSel");
-  sSel.innerHTML = st.hw_sinks.map(s => `<option value="${s.name}">${s.desc} (${s.name})</option>`).join("");
-  if (st.target_node) sSel.value = st.target_node;
+  sSel.innerHTML = `<option value="">Auto (follow system default)</option>` +
+    st.sinks.map(s => `<option value="${escHtml(s.name)}">${escHtml(s.desc)} (${escHtml(s.name)})</option>`).join("");
+  sSel.value = st.target_node || "";
+  document.getElementById("smartCb").checked = !!st.smart_filter;
+  document.getElementById("infoMeta").textContent =
+    `Service: ${st.service_name} | Profiles: ${st.profiles_dir} | PipeWire Default: ${st.default_sink || "unknown"}`;
+  document.getElementById("confPreview").value = st.active_conf || "(No active.conf yet. Click 'Apply & Activate'.)";
 
-  document.getElementById("smartCb").checked = st.smart_filter;
-  document.getElementById("infoMeta").textContent = `Service: ${st.service} | Config: ${st.active_conf} | Default sink: ${st.default_sink || "(none)"}`;
-  document.getElementById("confPreview").value = st.conf_preview || "";
-
-  if (pickP) await loadProfile(pickP);
+  if (st.active_profile) await loadProfile(st.active_profile);
+  else clearProfileUI();
 }
 
 async function loadProfile(name) {
-  if (!name) return;
-  currentProf = await api(`/api/profile?name=${encodeURIComponent(name)}`);
-  renderProfile();
+  if (!name) return clearProfileUI();
+  renderProfile(await api("/api/profile?name=" + encodeURIComponent(name)));
 }
 
-function renderProfile() {
-  const p = currentProf;
-  if (!p) return;
-  document.getElementById("preampIn").value = p.preamp;
-  document.getElementById("rawEdit").value = p.raw_text;
-  document.getElementById("bandCount").textContent = `${p.bands.filter(b => b.enabled).length} / ${p.bands.length} active`;
+function renderProfile(prof) {
+  currentProf = prof;
+  document.getElementById("preampIn").value = prof.preamp;
+  document.getElementById("bandCount").textContent = `${prof.bands.filter(b => b.enabled).length}/${prof.bands.length} bands active`;
+  document.getElementById("rawEdit").value = prof.raw_text;
 
-  const tb = document.getElementById("bandsBody");
-  tb.innerHTML = "";
-  for (const b of p.bands) {
-    const tr = document.createElement("tr");
-    const td0 = document.createElement("td");
-    td0.innerHTML = `<input type="checkbox" ${b.enabled ? "checked" : ""} onchange="toggleBand(${b.index}, this.checked)">`;
-    const td1 = document.createElement("td");
-    td1.textContent = b.raw_type;
-    const td2 = document.createElement("td");
-    td2.className = "num";
-    td2.textContent = `${b.freq} Hz`;
-    const td3 = document.createElement("td");
-    td3.className = "num";
-    td3.textContent = b.no_gain ? "—" : `${b.gain >= 0 ? "+" : ""}${b.gain.toFixed(2)} dB`;
-    const td4 = document.createElement("td");
-    td4.className = "num";
-    td4.textContent = b.q.toFixed(2);
-    tr.append(td0, td1, td2, td3, td4);
-    tb.appendChild(tr);
+  const wb = document.getElementById("warnBox");
+  if (prof.warnings && prof.warnings.length) {
+    wb.textContent = "Parse warnings: " + prof.warnings.join(" | ");
+    wb.hidden = false;
+  } else {
+    wb.hidden = true;
   }
-  drawPlot();
+
+  document.getElementById("bandsBody").innerHTML = prof.bands.map((b, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td><input type="checkbox" ${b.enabled ? "checked" : ""} onchange="toggleBand(${i})"></td>
+      <td>${escHtml(b.type)}</td>
+      <td class="num">${b.freq}</td>
+      <td class="num">${b.no_gain ? "-" : b.gain}</td>
+      <td class="num">${b.q}</td>
+    </tr>`).join("");
+  drawPlot(prof);
 }
 
-function drawPlot() {
+function drawPlot(prof) {
   const svg = document.getElementById("plot");
-  const W = 960, H = 220, PL = 42, PR = 12, PT = 12, PB = 24;
-  const PW = W - PL - PR, PH = H - PT - PB;
-  const xOf = f => PL + (Math.log10(Math.max(20, Math.min(20000, f))) - Math.log10(20)) / 3 * PW;
-  const yOf = db => PT + (24 - Math.max(-24, Math.min(24, db))) / 48 * PH;
+  const W = 900, H = 290, pad = { l: 42, r: 16, t: 14, b: 26 }, pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+  const yMin = -18, yMax = 18;
+  const xOf = f => pad.l + (Math.log10(f) - Math.log10(20)) / 3 * pw;
+  const yOf = db => pad.t + (1 - (db - yMin) / (yMax - yMin)) * ph;
 
-  let out = `<defs><linearGradient id="eqFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#38bdf8" stop-opacity="0.32"/><stop offset="100%" stop-color="#38bdf8" stop-opacity="0.02"/></linearGradient></defs>`;
-  const fTicks = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
-  for (const f of fTicks) {
-    const x = xOf(f).toFixed(1);
-    const label = f >= 1000 ? `${f / 1000}k` : `${f}`;
-    out += `<line x1="${x}" y1="${PT}" x2="${x}" y2="${H - PB}" stroke="#263348" stroke-width="1"/>`;
-    out += `<text x="${x}" y="${H - 7}" text-anchor="middle" fill="#64748b" font-size="10">${label}</text>`;
+  let out = `<defs><clipPath id="plotClip"><rect x="${pad.l}" y="${pad.t}" width="${pw}" height="${ph}"/></clipPath></defs>`;
+  for (let db = -18; db <= 18; db += 6) {
+    const y = yOf(db);
+    out += `<line x1="${pad.l}" y1="${y}" x2="${W - pad.r}" y2="${y}" stroke="${db === 0 ? "#4c5268" : "#222530"}" stroke-width="${db === 0 ? 1.5 : 1}"/>`;
+    out += `<text x="${pad.l - 6}" y="${y + 4}" fill="#8e95aa" font-size="10.5" text-anchor="end">${db > 0 ? "+" + db : db}</text>`;
   }
-  const dTicks = [-24, -18, -12, -6, 0, 6, 12, 18, 24];
-  for (const d of dTicks) {
-    const y = yOf(d).toFixed(1);
-    const zero = d === 0;
-    out += `<line x1="${PL}" y1="${y}" x2="${W - PR}" y2="${y}" stroke="${zero ? "#475569" : "#263348"}" stroke-width="1"${zero ? ' stroke-dasharray="4 4"' : ""}/>`;
-    out += `<text x="${PL - 6}" y="${y + 3}" text-anchor="end" fill="#64748b" font-size="10">${d > 0 ? "+" + d : d}</text>`;
+  for (const f of [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]) {
+    const x = xOf(f);
+    out += `<line x1="${x}" y1="${pad.t}" x2="${x}" y2="${H - pad.b}" stroke="#222530"/>`;
+    out += `<text x="${x}" y="${H - 8}" fill="#8e95aa" font-size="10.5" text-anchor="middle">${f >= 1000 ? (f / 1000) + "k" : f}</text>`;
   }
 
-  if (currentProf && currentProf.freqs.length) {
-    const pts = currentProf.freqs.map((f, i) => [xOf(f), yOf(currentProf.mags[i])]);
-    const dPath = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
-    const zeroY = yOf(0).toFixed(1);
-    const areaD = `${dPath} L${pts[pts.length - 1][0].toFixed(1)},${zeroY} L${pts[0][0].toFixed(1)},${zeroY} Z`;
-    out += `<path d="${areaD}" fill="url(#eqFill)"/>`;
-    out += `<path d="${dPath}" fill="none" stroke="#38bdf8" stroke-width="2"/>`;
-    for (const b of currentProf.bands) {
-      if (!b.enabled || b.no_gain) continue;
-      out += `<circle cx="${xOf(b.freq).toFixed(1)}" cy="${yOf(currentProf.preamp + b.gain).toFixed(1)}" r="3.5" fill="#7dd3fc" stroke="#0f172a" stroke-width="1.2"/>`;
-    }
+  const pts = prof.curve.map(([f, db]) => `${xOf(f).toFixed(1)},${yOf(db).toFixed(1)}`);
+  const y0 = yOf(0);
+  out += `<g clip-path="url(#plotClip)">`;
+  out += `<polygon points="${xOf(20).toFixed(1)},${y0.toFixed(1)} ${pts.join(" ")} ${xOf(20000).toFixed(1)},${y0.toFixed(1)}" fill="rgba(168,199,250,0.14)"/>`;
+  out += `<polyline fill="none" stroke="#a8c7fa" stroke-width="2.4" points="${pts.join(" ")}"/>`;
+  for (const b of prof.bands) {
+    if (!b.enabled) continue;
+    out += `<circle cx="${xOf(b.freq).toFixed(1)}" cy="${yOf(b.no_gain ? 0 : b.gain).toFixed(1)}" r="3.5" fill="#7dd88b" opacity="0.85"/>`;
   }
+  out += `</g>`;
   svg.innerHTML = out;
 }
 
 function onPlotHover(e) {
-  if (!currentProf || !currentProf.freqs.length) return;
-  const svg = document.getElementById("plot");
-  const r = svg.getBoundingClientRect();
-  const x = (e.clientX - r.left) / r.width * 960;
-  const ratio = Math.max(0, Math.min(1, (x - 42) / (960 - 54)));
-  const freq = 20 * Math.pow(1000, ratio);
-  let best = 0, bestD = 1e9;
-  currentProf.freqs.forEach((f, i) => { const d = Math.abs(f - freq); if (d < bestD) { bestD = d; best = i; } });
-  const db = currentProf.mags[best];
-  hoverText.textContent = `${freq >= 1000 ? (freq / 1000).toFixed(2) + " kHz" : Math.round(freq) + " Hz"}  |  ${db >= 0 ? "+" : ""}${db.toFixed(2)} dB`;
+  if (!currentProf) return;
+  const rect = document.getElementById("plot").getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const x = ((e.clientX - rect.left) / rect.width) * 900;
+  const y = ((e.clientY - rect.top) / rect.height) * 290;
+  const freq = Math.pow(10, Math.log10(20) + ((x - 42) / (900 - 58)) * 3);
+  const db = 18 - ((y - 14) / (290 - 40)) * 36;
+  document.getElementById("hoverTxt").textContent = (freq >= 20 && freq <= 20000) ? `${Math.round(freq)} Hz | ${db >= 0 ? "+" : ""}${db.toFixed(1)} dB` : "";
 }
 
 async function applySelected() {
   const name = document.getElementById("profileSel").value;
-  if (!name) return;
-  setStatus(`Applying '${name}'...`);
-  const res = await api("/api/apply", { name });
-  setStatus(res.message);
+  if (!name) return setStatus("No profile selected.");
+  setStatus((await api("/api/apply", { name })).message);
   await refreshState();
 }
 
 async function toggleEQ() {
   const name = document.getElementById("profileSel").value;
-  const res = await api("/api/toggle_eq", { name });
-  setStatus(res.message);
+  setStatus((await api("/api/toggle_eq", { name })).message);
   await refreshState();
 }
 
 async function saveSettings() {
-  const target_node = document.getElementById("sinkSel").value;
-  const smart_filter = document.getElementById("smartCb").checked;
-  setStatus((await api("/api/settings", { target_node, smart_filter })).message);
+  setStatus((await api("/api/settings", {
+    target_node: document.getElementById("sinkSel").value,
+    smart_filter: document.getElementById("smartCb").checked
+  })).message);
 }
 
-async function setPreamp(val) {
+async function setPreamp() {
   if (!currentProf) return;
-  currentProf = await api("/api/profile/preamp", { name: currentProf.name, preamp: parseFloat(val) });
-  renderProfile();
-  setStatus(`Preamp updated to ${currentProf.preamp} dB (click Apply to activate).`);
+  const val = parseFloat(document.getElementById("preampIn").value);
+  if (Number.isNaN(val)) return setStatus("Invalid preamp value.");
+  renderProfile(await api("/api/profile/preamp", { name: currentProf.name, preamp: val }));
+  setStatus("Preamp updated (click Apply to activate).");
 }
 
-function autoPreamp() {
+async function autoPreamp() {
   if (!currentProf) return;
-  setPreamp(currentProf.recommended_preamp);
+  document.getElementById("preampIn").value = currentProf.recommended_preamp;
+  await setPreamp();
 }
 
-async function toggleBand(index, enabled) {
+async function toggleBand(idx) {
   if (!currentProf) return;
-  currentProf = await api("/api/profile/toggle_band", { name: currentProf.name, index, enabled });
-  renderProfile();
-  setStatus(`Band ${index + 1} ${enabled ? "enabled" : "disabled"} (click Apply to activate).`);
+  renderProfile(await api("/api/profile/toggle_band", { name: currentProf.name, index: idx }));
+  setStatus("Band toggled (click Apply to activate).");
 }
 
 async function saveRawAndApply() {
-  const name = document.getElementById("profileSel").value;
-  if (!name) return;
-  const res = await api("/api/profile/save", { name, text: document.getElementById("rawEdit").value });
-  setStatus(res.message);
+  const name = document.getElementById("profileSel").value || (currentProf ? currentProf.name : "Custom");
+  setStatus((await api("/api/profile/save", { name, text: document.getElementById("rawEdit").value })).message);
   await refreshState();
 }
 
 async function importFileObj(file) {
   if (!file) return;
   const text = await file.text();
-  const name = file.name.replace(/\.txt$/i, "") || "Imported";
-  const res = await api("/api/profile/save", { name, text });
-  setStatus(res.message);
-  await refreshState(false);
-  document.getElementById("profileSel").value = name;
-  await loadProfile(name);
+  const name = file.name.replace(/\.txt$/i, "");
+  setStatus((await api("/api/profile/save", { name, text })).message);
+  await refreshState();
 }
 
 function pastePreset() {
   document.getElementById("pasteName").value = "";
   document.getElementById("pasteBody").value = "";
   pasteDlg.showModal();
+  document.getElementById("pasteName").focus();
 }
 
 async function submitPasteModal() {
-  const name = document.getElementById("pasteName").value.trim();
+  const name = document.getElementById("pasteName").value.trim() || "Pasted Preset";
   const text = document.getElementById("pasteBody").value;
-  if (!name || !text.trim()) return;
+  if (!text.trim()) return;
   pasteDlg.close();
-  const res = await api("/api/profile/save", { name, text });
-  setStatus(res.message);
-  await refreshState(false);
-  document.getElementById("profileSel").value = name;
-  await loadProfile(name);
+  setStatus((await api("/api/profile/save", { name, text })).message);
+  await refreshState();
 }
 
 async function deleteProfile() {
   const name = document.getElementById("profileSel").value;
   if (!name || !confirm(`Delete profile '${name}'?`)) return;
   setStatus((await api("/api/profile/delete", { name })).message);
-  await refreshState(false);
+  await refreshState();
 }
 
 async function quitApp() {
   await api("/api/quit", {});
-  document.body.innerHTML = '<div style="padding:40px;text-align:center;color:#94a3b8;font-family:sans-serif;">pw-eq-gui closed. Your PipeWire EQ service continues running in the background. You may close this tab.</div>';
+  setStatus("Server stopped. You can close this tab.");
 }
 
-document.body.addEventListener("dragover", e => { e.preventDefault(); document.body.classList.add("drag"); });
-document.body.addEventListener("dragleave", () => document.body.classList.remove("drag"));
-document.body.addEventListener("drop", e => {
-  e.preventDefault();
-  document.body.classList.remove("drag");
-  if (e.dataTransfer.files.length) importFileObj(e.dataTransfer.files[0]);
-});
+document.body.addEventListener("dragenter", e => { e.preventDefault(); dragDepth++; document.body.classList.add("drag"); });
+document.body.addEventListener("dragover", e => { e.preventDefault(); });
+document.body.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove("drag"); } });
+document.body.addEventListener("drop", e => { e.preventDefault(); dragDepth = 0; document.body.classList.remove("drag"); importFileObj(e.dataTransfer.files[0]); });
 
 refreshState();
 </script>
@@ -426,150 +395,173 @@ refreshState();
 
 def _serialize_profile(name: str) -> dict:
     p = core.load_profile(name)
-    freqs, mags = core.compute_response_curve(p)
+    freqs, curve = core.compute_response_curve(p)
     return {
         "name": p.name,
         "preamp": p.preamp,
         "recommended_preamp": core.recommended_preamp(p),
         "raw_text": p.raw_text,
-        "freqs": freqs,
-        "mags": mags,
+        "warnings": p.warnings,
+        "curve": [[round(f, 1), round(db, 2)] for f, db in zip(freqs, curve)],
         "bands": [
             {
-                "index": i,
-                "enabled": b.enabled,
-                "raw_type": b.raw_type,
-                "freq": b.freq,
-                "gain": b.gain,
-                "q": b.q,
-                "no_gain": b.pw_type in core.NO_GAIN_TYPES,
+                "enabled": b.enabled, "type": b.raw_type, "freq": b.freq,
+                "gain": b.gain, "q": round(b.q, 3), "no_gain": b.pw_type in core.NO_GAIN_TYPES,
             }
-            for i, b in enumerate(p.bands)
+            for b in p.bands
         ],
     }
 
 
 class Handler(BaseHTTPRequestHandler):
-    def log_message(self, fmt: str, *args) -> None:
-        return
+    def log_message(self, fmt, *args):
+        pass
 
-    def _send(self, code: int, body: bytes, ctype: str) -> None:
-        self.send_response(code)
+    def _send(self, body: bytes, ctype: str, status=HTTPStatus.OK):
+        self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
-    def _send_json(self, obj: dict, code: int = HTTPStatus.OK) -> None:
-        self._send(code, json.dumps(obj).encode("utf-8"), "application/json; charset=utf-8")
+    def _send_json(self, obj: dict, status=HTTPStatus.OK):
+        self._send(json.dumps(obj).encode("utf-8"), "application/json; charset=utf-8", status)
 
     def _read_json(self) -> dict:
-        n = int(self.headers.get("Content-Length", "0"))
-        return json.loads(self.rfile.read(n).decode("utf-8")) if n else {}
-
-    def do_GET(self) -> None:
-        u = urllib.parse.urlparse(self.path)
-        qs = urllib.parse.parse_qs(u.query)
         try:
-            if u.path == "/":
-                self._send(HTTPStatus.OK, HTML.encode("utf-8"), "text/html; charset=utf-8")
-            elif u.path == "/api/state":
-                state = core.load_state()
+            length = int(self.headers.get("Content-Length", "0") or 0)
+        except ValueError as e:
+            raise ValueError("Invalid Content-Length.") from e
+        raw = self.rfile.read(length) if length > 0 else b"{}"
+        data = json.loads(raw.decode("utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("Expected JSON object.")
+        return data
+
+    def do_GET(self):
+        parsed = urllib.parse.urlparse(self.path)
+        try:
+            if parsed.path == "/":
+                return self._send(HTML.encode("utf-8"), "text/html; charset=utf-8")
+            if parsed.path == "/api/state":
+                st = core.load_state()
                 sinks, default_sink, _ = core.get_pw_sinks_and_defaults()
-                hw_sinks = [s for s in sinks if not core.is_eq_node(s["name"])]
+                profiles = core.list_profiles()
+                active = st.get("active_profile", "")
+                if active not in profiles:
+                    active = profiles[0] if profiles else ""
                 conf = core.ACTIVE_CONF.read_text(encoding="utf-8") if core.ACTIVE_CONF.exists() else ""
-                self._send_json({
-                    "running": core.is_eq_running(),
-                    "profiles": core.list_profiles(),
-                    "active_profile": state.get("active_profile", ""),
-                    "target_node": state.get("target_node", ""),
-                    "smart_filter": state.get("smart_filter", True),
-                    "hw_sinks": hw_sinks,
+                return self._send_json({
+                    "eq_running": core.is_eq_running(),
+                    "profiles": profiles,
+                    "active_profile": active,
+                    "target_node": st.get("target_node", ""),
+                    "smart_filter": st.get("smart_filter", True),
+                    "sinks": [s for s in sinks if not core.is_eq_node(s["name"])],
                     "default_sink": default_sink,
-                    "service": core.SERVICE_NAME,
-                    "active_conf": str(core.ACTIVE_CONF),
-                    "conf_preview": conf,
+                    "service_name": core.SERVICE_NAME,
+                    "profiles_dir": str(core.PROFILES_DIR),
+                    "active_conf": conf,
                 })
-            elif u.path == "/api/profile":
-                name = qs.get("name", [""])[0]
-                self._send_json(_serialize_profile(name))
-            else:
-                self._send(HTTPStatus.NOT_FOUND, b"Not found", "text/plain")
-        except Exception as e:
-            self._send(HTTPStatus.INTERNAL_SERVER_ERROR, str(e).encode("utf-8"), "text/plain")
+            if parsed.path == "/api/profile":
+                name = urllib.parse.parse_qs(parsed.query).get("name", [""])[0]
+                return self._send_json(_serialize_profile(name))
+            self._send(b"Not Found", "text/plain", HTTPStatus.NOT_FOUND)
+        except FileNotFoundError:
+            self._send_json({"ok": False, "message": "Profile not found."}, HTTPStatus.NOT_FOUND)
+        except (ValueError, KeyError) as e:
+            self._send_json({"ok": False, "message": str(e)}, HTTPStatus.BAD_REQUEST)
 
-    def do_POST(self) -> None:
+    def do_POST(self):
+        path = urllib.parse.urlparse(self.path).path
         try:
-            data = self._read_json()
-            if self.path == "/api/profile/save":
-                name, text = data["name"], data["text"]
-                core.save_profile_text(name, text)
-                ok, msg = core.apply_profile(name)
-                self._send_json({"ok": ok, "message": msg})
-            elif self.path == "/api/profile/preamp":
-                name = data["name"]
+            body = self._read_json()
+
+            if path == "/api/profile/save":
+                name = str(body.get("name", "")).strip() or "Untitled"
+                text = str(body.get("text", ""))
+                saved_path = core.save_profile_text(name, text)
+                ok, msg = core.apply_profile(saved_path.stem)
+                return self._send_json({"ok": ok, "message": msg}, HTTPStatus.OK if ok else HTTPStatus.BAD_REQUEST)
+
+            if path == "/api/profile/preamp":
+                name = str(body["name"])
+                preamp = float(body["preamp"])
+                if not math.isfinite(preamp):
+                    raise ValueError("Invalid preamp value.")
                 p = core.load_profile(name)
-                p.preamp = float(data["preamp"])
+                p.preamp = preamp
                 core.save_profile_text(name, core.format_eq_text(p))
-                self._send_json(_serialize_profile(name))
-            elif self.path == "/api/profile/toggle_band":
-                name, idx, en = data["name"], int(data["index"]), bool(data["enabled"])
+                return self._send_json(_serialize_profile(name))
+
+            if path == "/api/profile/toggle_band":
+                name = str(body["name"])
+                idx = int(body["index"])
                 p = core.load_profile(name)
-                p.bands[idx].enabled = en
+                if not (0 <= idx < len(p.bands)):
+                    raise ValueError("Band index out of range.")
+                p.bands[idx].enabled = not p.bands[idx].enabled
                 core.save_profile_text(name, core.format_eq_text(p))
-                self._send_json(_serialize_profile(name))
-            elif self.path == "/api/profile/delete":
-                core.delete_profile(data["name"])
-                self._send_json({"ok": True, "message": f"Deleted '{data['name']}'."})
-            elif self.path == "/api/apply":
-                ok, msg = core.apply_profile(data["name"])
-                self._send_json({"ok": ok, "message": msg})
-            elif self.path == "/api/toggle_eq":
+                return self._send_json(_serialize_profile(name))
+
+            if path == "/api/profile/delete":
+                name = str(body.get("name", ""))
+                core.delete_profile(name)
+                return self._send_json({"ok": True, "message": f"Deleted '{name}'."})
+
+            if path == "/api/apply":
+                ok, msg = core.apply_profile(str(body.get("name", "")))
+                return self._send_json({"ok": ok, "message": msg}, HTTPStatus.OK if ok else HTTPStatus.BAD_REQUEST)
+
+            if path == "/api/toggle_eq":
                 if core.is_eq_running():
                     ok, msg = core.stop_eq()
                 else:
-                    name = data.get("name") or core.load_state().get("active_profile")
-                    ok, msg = core.apply_profile(name) if name else (False, "Select a profile first.")
-                self._send_json({"ok": ok, "message": msg})
-            elif self.path == "/api/settings":
+                    name = str(body.get("name", "")).strip()
+                    if not name:
+                        return self._send_json({"ok": False, "message": "No profile selected."}, HTTPStatus.BAD_REQUEST)
+                    ok, msg = core.apply_profile(name)
+                return self._send_json({"ok": ok, "message": msg}, HTTPStatus.OK if ok else HTTPStatus.BAD_REQUEST)
+
+            if path == "/api/settings":
                 st = core.load_state()
-                st["target_node"] = data.get("target_node", "")
-                st["smart_filter"] = bool(data.get("smart_filter", True))
+                st["target_node"] = str(body.get("target_node") or "")
+                st["smart_filter"] = bool(body.get("smart_filter", True))
                 core.save_state(st)
-                self._send_json({"ok": True, "message": "Settings saved (click Apply to rebuild config if active)."})
-            elif self.path == "/api/quit":
-                self._send_json({"ok": True})
-                threading.Thread(target=self.server.shutdown, daemon=True).start()
-            else:
-                self._send(HTTPStatus.NOT_FOUND, b"Not found", "text/plain")
-        except Exception as e:
-            self._send(HTTPStatus.INTERNAL_SERVER_ERROR, str(e).encode("utf-8"), "text/plain")
+                return self._send_json({"ok": True, "message": "Settings saved (click Apply to activate)."})
+
+            if path == "/api/quit":
+                self._send_json({"ok": True, "message": "Shutting down."})
+                threading.Timer(0.1, self.server.shutdown).start()
+                return
+
+            self._send_json({"ok": False, "message": "Not Found"}, HTTPStatus.NOT_FOUND)
+        except FileNotFoundError:
+            self._send_json({"ok": False, "message": "Profile not found."}, HTTPStatus.NOT_FOUND)
+        except (ValueError, KeyError, json.JSONDecodeError) as e:
+            self._send_json({"ok": False, "message": str(e)}, HTTPStatus.BAD_REQUEST)
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="PipeWire Parametric EQ Local Web UI")
-    parser.add_argument("--port", type=int, default=0, help="Port to listen on (0 = auto)")
-    parser.add_argument("--no-browser", action="store_true", help="Do not open browser automatically")
-    args = parser.parse_args()
+def main():
+    ap = argparse.ArgumentParser(description="PipeWire Parametric EQ Local Web GUI")
+    ap.add_argument("--port", type=int, default=0, help="Port to bind on 127.0.0.1 (default: random free port)")
+    ap.add_argument("--no-browser", action="store_true", help="Do not open browser automatically")
+    args = ap.parse_args()
 
     core.ensure_dirs()
-    if not core.list_profiles():
-        core.save_profile_text(
-            "Flat Reference",
-            "Preamp: 0 dB\nFilter 1: ON PK Fc 1000 Hz Gain 0 dB Q 1.0\n",
-        )
-
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    url = f"http://127.0.0.1:{server.server_address[1]}/"
-    print(f"pw-eq-gui running at {url} (Ctrl+C to quit)")
+    ThreadingHTTPServer.daemon_threads = True
+    srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    url = f"http://127.0.0.1:{srv.server_port}"
+    print(f"PipeWire Parametric EQ UI running at {url} (Ctrl+C to quit)")
     if not args.no_browser:
-        threading.Timer(0.25, lambda: webbrowser.open(url)).start()
+        threading.Timer(0.2, lambda: webbrowser.open(url)).start()
     try:
-        server.serve_forever()
+        srv.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        server.server_close()
+        srv.server_close()
 
 
 if __name__ == "__main__":
