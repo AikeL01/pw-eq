@@ -1,8 +1,2 @@
 __pycache__/
 *.py[cod]
-build/
-dist/
-*.egg-info/
-*.pkg.tar.*
-src/*.egg-info/
-pkg/
