@@ -24,8 +24,6 @@ Loads Equalizer APO / AutoEQ / Squiglink / PEQdB `.txt` presets directly into Pi
 ./pw-eq-gui
 ```
 
-## Uninstall
-```bash
-./uninstall.sh          # asks whether to keep saved profiles
-./uninstall.sh --purge  # removes everything including saved profiles
+## Cleanup
+```systemctl --user disable --now pw-eq.service && rm -rf ~/.config/pw-eq ~/.config/systemd/user/pw-eq.service) or a built-in ./pw-eq-gui --cleanup flag.
 ```
