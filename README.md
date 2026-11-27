@@ -21,7 +21,7 @@ Loads Equalizer APO / AutoEQ / Squiglink / PEQdB `.txt` presets directly into Pi
 ## Usage
 
 ```bash
-pw-eq-gui
+./pw-eq-gui
 ```
 
 ## Uninstall
