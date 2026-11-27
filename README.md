@@ -18,14 +18,6 @@ Loads Equalizer APO / AutoEQ / Squiglink / PEQdB `.txt` presets directly into Pi
 - `wireplumber` (0.5+ recommended for Smart Filter mode; 0.4 setups can uncheck Smart Filter mode in the UI)
 - `python3` (3.10+)
 
-## Installation
-
-```bash
-git clone https://github.com/AikeL01/pw-eq.git
-cd pw-eq
-./install.sh
-```
-
 ## Usage
 
 ```bash
